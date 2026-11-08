@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package alfred.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// DaemonService exposes service identity, liveness, and readiness.
+service DaemonService {
+  // GetStatus reports the lifecycle state of the responding Alfred process.
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+}
+
+// DaemonState describes whether the service may accept application work.
+enum DaemonState {
+  DAEMON_STATE_UNSPECIFIED = 0;
+  DAEMON_STATE_STARTING = 1;
+  DAEMON_STATE_READY = 2;
+  DAEMON_STATE_STOPPING = 3;
+}
+
+// GetStatusRequest requests current service status.
+message GetStatusRequest {}
+
+// GetStatusResponse identifies the process and reports readiness.
+message GetStatusResponse {
+  string instance_id = 1;
+  string version = 2;
+  DaemonState state = 3;
+  google.protobuf.Timestamp started_at = 4;
+}

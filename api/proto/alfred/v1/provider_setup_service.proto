@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package alfred.v1;
+
+import "alfred/v1/setup.proto";
+
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// ProviderSetupService exposes provider-defined onboarding forms and persistence.
+// Saving configuration does not verify authentication or activate inference.
+service ProviderSetupService {
+  // ListProviderDefinitions returns setup choices in provider-type order.
+  rpc ListProviderDefinitions(ListProviderDefinitionsRequest) returns (ListProviderDefinitionsResponse);
+  // PrepareProviderSetup returns a form with only safe, non-secret saved values.
+  rpc PrepareProviderSetup(PrepareProviderSetupRequest) returns (PrepareProviderSetupResponse);
+  // SubmitProviderSetup validates and saves a complete form submission.
+  rpc SubmitProviderSetup(SubmitProviderSetupRequest) returns (SubmitProviderSetupResponse);
+}
+
+// ProviderSetupMethod declares an ordered form such as API-key authentication.
+message ProviderSetupMethod {
+  string id = 1;
+  string name = 2;
+  repeated SetupField fields = 3;
+}
+
+// ProviderDefinition lists the setup methods offered by an implementation.
+message ProviderDefinition {
+  string type = 1;
+  string name = 2;
+  repeated ProviderSetupMethod methods = 3;
+}
+
+// ProviderSetupForm contains only declared non-secret saved values.
+message ProviderSetupForm {
+  string type = 1;
+  string instance_id = 2;
+  ProviderSetupMethod method = 3;
+  map<string, string> values = 4;
+}
+
+// ProviderInstance contains configured metadata, without credentials or references.
+message ProviderInstance {
+  string id = 1;
+  string type = 2;
+  string name = 3;
+  bool enabled = 4;
+  map<string, string> settings = 5;
+}
+
+// ListProviderDefinitionsRequest requests all available setup definitions.
+message ListProviderDefinitionsRequest {}
+
+// ListProviderDefinitionsResponse contains definitions, not runtime availability.
+message ListProviderDefinitionsResponse {
+  repeated ProviderDefinition definitions = 1;
+}
+
+// PrepareProviderSetupRequest selects a method and optionally an existing instance.
+// A supplied instance_id must exist and match the requested provider type.
+message PrepareProviderSetupRequest {
+  string type = 1;
+  string method_id = 2;
+  string instance_id = 3;
+}
+
+// PrepareProviderSetupResponse contains the selected form.
+message PrepareProviderSetupResponse {
+  ProviderSetupForm form = 1;
+}
+
+// SubmitProviderSetupRequest replaces one instance's selected-method settings.
+// Values can contain secrets and must never be logged or added to session events.
+// Existing API-key connections require reentry of the key on submission.
+message SubmitProviderSetupRequest {
+  string instance_id = 1;
+  string type = 2;
+  string method_id = 3;
+  string name = 4;
+  bool enabled = 5;
+  map<string, string> values = 6;
+}
+
+// SubmitProviderSetupResponse contains either saved metadata or field errors.
+// An instance is configured, not authentication-verified or inference-ready.
+message SubmitProviderSetupResponse {
+  ProviderInstance instance = 1;
+  repeated SetupFieldError field_errors = 2;
+}

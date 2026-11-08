@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+package alfred.v1;
+
+import "alfred/v1/types.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// RunEvent is a user-visible durable fact emitted during a run.
+message RunEvent {
+  string id = 1;
+  string run_id = 2;
+  uint64 sequence = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+  oneof payload {
+    RunStateChanged run_state_changed = 5;
+    MessageAdded message_added = 6;
+    ToolCallRequested tool_call_requested = 7;
+    ToolCallCompleted tool_call_completed = 8;
+    ApprovalRequested approval_requested = 9;
+    ApprovalResolved approval_resolved = 10;
+    InputRequested input_requested = 11;
+    InputReceived input_received = 12;
+    RunInterrupted run_interrupted = 13;
+    ModelOutputCompleted model_output_completed = 14;
+  }
+}
+
+// RunStateChanged records a run lifecycle transition.
+message RunStateChanged {
+  RunStatus status = 1;
+}
+
+// MessageAdded records a completed transcript message.
+message MessageAdded {
+  Message message = 1;
+}
+
+// ToolCallRequested records a tool call requested by a model.
+message ToolCallRequested {
+  string model_call_id = 1;
+  ToolCall call = 2;
+}
+
+// ToolCallCompleted records the model-visible outcome of a tool invocation.
+message ToolCallCompleted {
+  ToolResult result = 1;
+}
+
+// ApprovalRequest asks for approval to execute an exact tool action.
+message ApprovalRequest {
+  string id = 1;
+  string call_id = 2;
+  string reason = 3;
+}
+
+// ApprovalRequested records a request for external approval.
+message ApprovalRequested {
+  ApprovalRequest request = 1;
+}
+
+// ApprovalResolution records a decision for an approval request.
+message ApprovalResolution {
+  string approval_id = 1;
+  ApprovalOutcome outcome = 2;
+  string reason = 3;
+}
+
+// ApprovalResolved records a completed approval decision.
+message ApprovalResolved {
+  ApprovalResolution resolution = 1;
+}
+
+// RunInputRequest asks for additional user input.
+message RunInputRequest {
+  string id = 1;
+  string call_id = 2;
+  repeated ContentPart prompt = 3;
+}
+
+// InputRequested records a request for additional input.
+message InputRequested {
+  RunInputRequest request = 1;
+}
+
+// RunInputResponse contains user input supplied to a run.
+message RunInputResponse {
+  string request_id = 1;
+  repeated ContentPart content = 2;
+}
+
+// InputReceived records input supplied for a pending request.
+message InputReceived {
+  RunInputResponse response = 1;
+}
+
+// RunInterrupted records a recoverable execution interruption.
+message RunInterrupted {
+  string reason = 1;
+  string message = 2;
+}
+
+// RunUpdate is a transient update that is not replayed after disconnect.
+message RunUpdate {
+  string run_id = 1;
+  oneof payload {
+    RunContentDelta content_delta = 2;
+    RunReasoningDelta reasoning_delta = 3;
+  }
+}
+
+// ReasoningTextKind distinguishes readable reasoning from its summary.
+enum ReasoningTextKind {
+  REASONING_TEXT_KIND_UNSPECIFIED = 0;
+  REASONING_TEXT_KIND_REASONING = 1;
+  REASONING_TEXT_KIND_SUMMARY = 2;
+}
+
+// Reasoning contains only provider-exposed readable text.
+message Reasoning {
+  string text = 1;
+  ReasoningTextKind text_kind = 2;
+}
+
+// ModelOutputItem is a readable item in provider output order.
+message ModelOutputItem {
+  oneof payload {
+    Message message = 1;
+    Reasoning reasoning = 2;
+  }
+}
+
+// ModelOutputCompleted projects readable output from a durable checkpoint.
+// Native replay data is never included.
+message ModelOutputCompleted {
+  string model_call_id = 1;
+  repeated ModelOutputItem output = 2;
+}
+
+// RunReasoningDelta is provisional readable output, never native replay data.
+message RunReasoningDelta {
+  string model_call_id = 1;
+  uint32 index = 2;
+  string text = 3;
+  ReasoningTextKind text_kind = 4;
+}
+
+// RunUpdateGap tells the client to discard provisional output because some
+// transient updates were not delivered. Durable events remain complete.
+message RunUpdateGap {}
+
+// RunContentDelta contains incremental output from one model call.
+message RunContentDelta {
+  string model_call_id = 1;
+  uint32 index = 2;
+  ContentPart delta = 3;
+}

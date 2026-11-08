@@ -1,0 +1,16 @@
+services:
+  alfred:
+    image: ${ALFRED_IMAGE:-ghcr.io/arionmiles/alfred:tip}
+    build:
+      context: .
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ALFRED_PORT:-8080}:8080"
+    volumes:
+      - alfred-data:/var/lib/alfred
+      - ./deploy/config.toml:/etc/alfred/config.toml:ro
+    stop_grace_period: 20s
+
+volumes:
+  alfred-data:

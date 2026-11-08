@@ -1,0 +1,2 @@
+data_dir = "/var/lib/alfred"
+listen_address = "0.0.0.0:8080"

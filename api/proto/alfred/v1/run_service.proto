@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package alfred.v1;
+
+import "alfred/v1/types.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// RunService exposes run queries and control operations.
+service RunService {
+  // GetRun returns one run by identity.
+  rpc GetRun(GetRunRequest) returns (GetRunResponse);
+  // ListRuns returns one creation-ordered page for a session.
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+  // ResolveApproval records an approval decision and redispatches the run.
+  rpc ResolveApproval(ResolveApprovalRequest) returns (ResolveApprovalResponse);
+  // ProvideInput records requested input and redispatches the run.
+  rpc ProvideInput(ProvideInputRequest) returns (ProvideInputResponse);
+  // ResumeRun redispatches an interrupted run.
+  rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse);
+  // CancelRun durably cancels a nonterminal run.
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
+}
+
+// RunCursor identifies a position in run creation order.
+message RunCursor {
+  google.protobuf.Timestamp created_at = 1;
+  string id = 2;
+}
+
+// GetRunRequest identifies the requested run.
+message GetRunRequest {
+  string run_id = 1;
+}
+
+// GetRunResponse contains the requested run.
+message GetRunResponse {
+  Run run = 1;
+}
+
+// ListRunsRequest selects one page of a session's runs.
+message ListRunsRequest {
+  string session_id = 1;
+  // page_size must be between 1 and 100.
+  uint32 page_size = 2;
+  RunCursor after = 3;
+}
+
+// ListRunsResponse contains a page and an optional following cursor.
+message ListRunsResponse {
+  repeated Run runs = 1;
+  RunCursor next = 2;
+}
+
+// ResolveApprovalRequest resolves one pending approval request.
+message ResolveApprovalRequest {
+  string run_id = 1;
+  string approval_id = 2;
+  ApprovalOutcome outcome = 3;
+  string reason = 4;
+}
+
+// ResolveApprovalResponse acknowledges the recorded decision.
+message ResolveApprovalResponse {}
+
+// ProvideInputRequest responds to one pending input request.
+message ProvideInputRequest {
+  string run_id = 1;
+  string request_id = 2;
+  repeated ContentPart content = 3;
+}
+
+// ProvideInputResponse acknowledges the recorded input.
+message ProvideInputResponse {}
+
+// ResumeRunRequest identifies an interrupted run to redispatch.
+message ResumeRunRequest {
+  string run_id = 1;
+}
+
+// ResumeRunResponse acknowledges that the run was accepted for execution.
+message ResumeRunResponse {}
+
+// CancelRunRequest identifies a nonterminal run to cancel.
+message CancelRunRequest {
+  string run_id = 1;
+}
+
+// CancelRunResponse acknowledges durable cancellation.
+message CancelRunResponse {}

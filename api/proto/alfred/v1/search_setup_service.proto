@@ -1,0 +1,42 @@
+syntax = "proto3";
+package alfred.v1;
+import "alfred/v1/setup.proto";
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// SearchSetupService manages search backends independently of model providers.
+service SearchSetupService {
+  // ListSearchBackends lists installed search setup definitions.
+  rpc ListSearchBackends(ListSearchBackendsRequest) returns (ListSearchBackendsResponse);
+  // PrepareSearchSetup returns editable non-secret values, never saved keys.
+  rpc PrepareSearchSetup(PrepareSearchSetupRequest) returns (PrepareSearchSetupResponse);
+  // SaveSearchSetup validates and saves settings and credentials.
+  rpc SaveSearchSetup(SaveSearchSetupRequest) returns (SaveSearchSetupResponse);
+}
+
+// SearchBackend declares one search backend's inputs.
+message SearchBackend {
+  string id = 1;
+  string name = 2;
+  repeated SetupField fields = 3;
+}
+// ListSearchBackendsRequest requests search setup definitions.
+message ListSearchBackendsRequest {}
+// ListSearchBackendsResponse contains installed backends.
+message ListSearchBackendsResponse { repeated SearchBackend backends = 1; }
+// PrepareSearchSetupRequest selects a backend by canonical name.
+message PrepareSearchSetupRequest { string backend = 1; }
+// PrepareSearchSetupResponse contains only non-secret saved values.
+message PrepareSearchSetupResponse {
+  SearchBackend backend = 1;
+  map<string,string> values = 2;
+}
+// SaveSearchSetupRequest may contain secrets; never log it or add it to session history.
+message SaveSearchSetupRequest {
+  string backend = 1;
+  map<string,string> values = 2;
+}
+// SaveSearchSetupResponse contains validation errors or a successful save acknowledgement.
+message SaveSearchSetupResponse {
+  bool saved = 1;
+  repeated SetupFieldError field_errors = 2;
+}

@@ -1,0 +1,188 @@
+version: "3"
+
+vars:
+  BUF_VERSION: v1.75.0
+  GO_FILES:
+    # Agent records can contain prototypes, and generated files remain exactly
+    # as their generators emit them.
+    sh: find backend -path 'backend/gen' -prune -o -type f -name '*.go' -print | sed 's#^backend/##'
+
+tasks:
+  ci:quality:
+    desc: Run platform-independent CI quality checks once
+    cmds:
+      - task: fmt:check
+      - task: proto:check
+      - task: lint:prod
+      - task: audit
+  fmt:
+    desc: Format Go source
+    env:
+      FORMAT_FILES: "{{.GO_FILES}}"
+    cmds:
+      - go -C backend tool gofumpt -extra -w $FORMAT_FILES
+      - go -C backend tool gci write --skip-generated -s standard -s default -s 'prefix(github.com/ArionMiles)' $FORMAT_FILES
+  fmt:check:
+    desc: Check formatting without changing source
+    env:
+      FORMAT_FILES: "{{.GO_FILES}}"
+    cmds:
+      - |
+        files=$(go -C backend tool gofumpt -extra -l $FORMAT_FILES) || exit $?
+        if test -n "$files"; then
+          printf '%s\n' "$files"
+          exit 1
+        fi
+      - |
+        files=$(go -C backend tool gci list --skip-generated -s standard -s default -s 'prefix(github.com/ArionMiles)' $FORMAT_FILES) || exit $?
+        if test -n "$files"; then
+          printf '%s\n' "$files"
+          exit 1
+        fi
+  fmt:files:
+    desc: Format explicitly selected backend-module-relative Go files
+    requires:
+      vars: [FILES]
+    env:
+      FORMAT_FILES: "{{.FILES}}"
+    cmds:
+      - go -C backend tool gofumpt -extra -w $FORMAT_FILES
+      - go -C backend tool gci write --skip-generated -s standard -s default -s 'prefix(github.com/ArionMiles)' $FORMAT_FILES
+  fmt:files:check:
+    desc: Check formatting of explicitly selected backend-module-relative Go files
+    requires:
+      vars: [FILES]
+    env:
+      FORMAT_FILES: "{{.FILES}}"
+    cmds:
+      - |
+        result=$(go -C backend tool gofumpt -extra -l $FORMAT_FILES) || exit $?
+        test -z "$result"
+      - |
+        result=$(go -C backend tool gci list --skip-generated -s standard -s default -s 'prefix(github.com/ArionMiles)' $FORMAT_FILES) || exit $?
+        test -z "$result"
+  mocks:
+    desc: Generate interface mocks used by tests
+    dir: backend
+    cmds:
+      - mkdir -p mocks
+      - find mocks -maxdepth 1 -type f -name '*_mock.go' -delete
+      - |
+        for source in *.go; do
+          if ! rg -q '^type [A-Za-z0-9_]+(\[[^]]+\])? interface' "$source"; then
+            continue
+          fi
+          exclusions=
+          if test "$source" = identity.go; then
+            exclusions=-exclude_interfaces=IDGenerator
+          fi
+          destination="mocks/${source%.go}_mock.go"
+          go tool mockgen \
+            -source="$source" \
+            -destination="$destination" \
+            -package=mocks \
+            -typed \
+            $exclusions
+        done
+      - go tool mockgen -source=pkg/tools/web.go -destination=mocks/search_mock.go -package=mocks -typed -exclude_interfaces=searchSettingsReader
+  proto:generate:
+    desc: Generate Go and Connect code from Protobuf schemas
+    cmds:
+      - go run github.com/bufbuild/buf/cmd/buf@{{.BUF_VERSION}} generate --config buf.yaml --template buf.gen.yaml api/proto
+  proto:lint:
+    desc: Check Protobuf schemas
+    cmds:
+      - go run github.com/bufbuild/buf/cmd/buf@{{.BUF_VERSION}} lint --config buf.yaml api/proto
+  proto:check:
+    desc: Check schemas and committed generated code
+    cmds:
+      - task: proto:lint
+      - task: proto:generate
+      - git diff --exit-code -- backend/gen
+  lint:
+    desc: Check source
+    cmds: [go -C backend tool golangci-lint run --timeout 5m]
+  lint:prod:
+    desc: Run CI lint checks
+    cmds: [go -C backend tool golangci-lint run --config .golangci-prod.toml --timeout 5m]
+  test:
+    desc: Run tests with the race detector
+    cmds: ["go -C backend test -race -timeout 180s ./... {{.CLI_ARGS}}"]
+  test:cover:
+    desc: Record test coverage
+    cmds: [go -C backend test -race -timeout 180s -coverprofile=coverage.out ./...]
+  test:container:
+    desc: Test Compose RPC access, persistence, and shutdown with an isolated data volume
+    cmds: [sh scripts/test-container.sh]
+  build:
+    desc: Build Alfred
+    cmds:
+      - task: build:binary
+  build:binary:
+    desc: Build a version-stamped binary (override VERSION or OUTPUT)
+    vars:
+      OUTPUT: '{{default "bin/alfred" .OUTPUT}}'
+      GIT_VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+      VERSION: "{{default .GIT_VERSION .VERSION}}"
+      LDFLAGS: '{{default (printf "-X github.com/ArionMiles/alfred/internal/buildinfo.Version=%s" .VERSION) .LDFLAGS}}'
+    cmds:
+      - |
+        output='{{.OUTPUT}}'
+        case "$output" in
+          /*) ;;
+          *) output="../$output" ;;
+        esac
+        go -C backend build -ldflags '{{.LDFLAGS}}' -o "$output" ./cmd/alfred
+  dev:
+    desc: Build and run Alfred normally (task dev -- --force restarts its server)
+    vars:
+      DATA_DIR: '{{default "/tmp/alfred-dev-data" .DATA_DIR}}'
+      OUTPUT: '{{default "/tmp/alfred-dev" .OUTPUT}}'
+    env:
+      ALFRED_CONFIG_FILE: "{{.DATA_DIR}}/dev-config.toml"
+      DEV_DATA_DIR: "{{.DATA_DIR}}"
+      DEV_BINARY: "{{.OUTPUT}}"
+      DEV_ARGS: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: 'test -z "$DEV_ARGS" || test "$DEV_ARGS" = "--force"'
+        msg: 'usage: task dev [DATA_DIR=...] [OUTPUT=...] -- [--force]'
+    cmds:
+      - task: build:binary
+        vars:
+          OUTPUT: "{{.OUTPUT}}"
+      - |
+        binary="$(cd "$(dirname "$DEV_BINARY")" && pwd -P)/$(basename "$DEV_BINARY")"
+        mkdir -p -m 700 "$DEV_DATA_DIR"
+        printf 'data_dir = "."\n' > "$ALFRED_CONFIG_FILE"
+        discovery="$DEV_DATA_DIR/service.json"
+        if test "$DEV_ARGS" = "--force" && test -f "$discovery"; then
+          pid=$(sed -n 's/.*"pid":[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$discovery")
+          case "$pid" in
+            ""|*[!0-9]*|0|1) printf '%s\n' "Invalid server PID in $discovery" >&2; exit 1 ;;
+          esac
+          if /bin/kill -0 "$pid" 2>/dev/null; then
+            process=$(ps -p "$pid" -o args=)
+            if test "$process" != "$binary serve"; then
+              printf '%s\n' "PID $pid does not match $binary serve; refusing to stop it" >&2
+              exit 1
+            fi
+            /bin/kill -TERM "$pid"
+            attempts=0
+            while /bin/kill -0 "$pid" 2>/dev/null; do
+              if test "$attempts" -ge 150; then
+                printf '%s\n' "Server $pid did not stop within 15 seconds" >&2
+                exit 1
+              fi
+              sleep 0.1
+              attempts=$((attempts + 1))
+            done
+          fi
+        fi
+        unset DEV_ARGS DEV_BINARY DEV_DATA_DIR
+        exec "$binary"
+  audit:
+    desc: Check known vulnerabilities
+    cmds: [go -C backend tool govulncheck ./...]
+  tidy:
+    cmds: [go -C backend mod tidy]

@@ -1,0 +1,8 @@
+SELECT id, project_id, title, created_at_unix_nano
+FROM sessions
+WHERE project_id = @project_id
+{{ if index .Flags "hasAfter" -}}
+AND (created_at_unix_nano, id) > (@after_created_at, @after_id)
+{{ end -}}
+ORDER BY created_at_unix_nano, id
+LIMIT @limit

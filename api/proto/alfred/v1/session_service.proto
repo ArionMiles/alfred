@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package alfred.v1;
+
+import "alfred/v1/types.proto";
+import "alfred/v1/run_event.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// SessionService exposes session queries used by Alfred clients.
+service SessionService {
+  // GetSession returns one session by identity.
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+  // ListSessions returns one creation-ordered page for a project.
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  // WatchSession replays durable events and then follows live session activity.
+  rpc WatchSession(WatchSessionRequest) returns (stream WatchSessionResponse);
+}
+
+// SessionCursor identifies a position in session creation order.
+message SessionCursor {
+  google.protobuf.Timestamp created_at = 1;
+  string id = 2;
+}
+
+// GetSessionRequest identifies the requested session.
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+// GetSessionResponse contains the requested session.
+message GetSessionResponse {
+  Session session = 1;
+}
+
+// ListSessionsRequest selects one page of a project's sessions.
+message ListSessionsRequest {
+  string project_id = 1;
+  // page_size must be between 1 and 100.
+  uint32 page_size = 2;
+  SessionCursor after = 3;
+}
+
+// ListSessionsResponse contains a page and an optional following cursor.
+message ListSessionsResponse {
+  repeated Session sessions = 1;
+  SessionCursor next = 2;
+}
+
+// WatchSessionRequest identifies a session and the last durable sequence
+// already processed by the client. Transient updates are never replayed.
+message WatchSessionRequest {
+  string session_id = 1;
+  uint64 after_sequence = 2;
+}
+
+// WatchSessionResponse carries the initial snapshot, durable replay, a
+// caught-up marker, and subsequent live activity in that order.
+message WatchSessionResponse {
+  oneof item {
+    WatchSessionSnapshot snapshot = 1;
+    RunEvent event = 2;
+    WatchSessionCaughtUp caught_up = 3;
+    RunUpdate update = 4;
+    RunUpdateGap update_gap = 5;
+  }
+}
+
+// WatchSessionSnapshot contains the session observed after live subscription
+// was established and before durable replay begins.
+message WatchSessionSnapshot {
+  Session session = 1;
+}
+
+// WatchSessionCaughtUp marks the end of durable replay.
+message WatchSessionCaughtUp {
+  uint64 through_sequence = 1;
+}

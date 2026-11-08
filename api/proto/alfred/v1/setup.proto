@@ -1,0 +1,33 @@
+syntax = "proto3";
+package alfred.v1;
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// SetupFieldKind describes the input a client should render.
+enum SetupFieldKind {
+  SETUP_FIELD_KIND_UNSPECIFIED = 0;
+  SETUP_FIELD_KIND_TEXT = 1;
+  SETUP_FIELD_KIND_SECRET = 2;
+  SETUP_FIELD_KIND_SELECT = 3;
+}
+
+// SetupFieldOption separates the submitted value from its display label.
+message SetupFieldOption {
+  string value = 1;
+  string label = 2;
+}
+
+// SetupField declares one input; it never contains a secret value.
+message SetupField {
+  string id = 1;
+  string label = 2;
+  string description = 3;
+  SetupFieldKind kind = 4;
+  bool required = 5;
+  repeated SetupFieldOption options = 6;
+}
+
+// SetupFieldError is safe to display and never echoes a secret input.
+message SetupFieldError {
+  string field_id = 1;
+  string message = 2;
+}

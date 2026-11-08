@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alfred agent state machine</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --page: light-dark(#f7f7f5, #111310);
+      --surface: light-dark(#ffffff, #191c18);
+      --surface-2: light-dark(#f0f1ed, #232720);
+      --ink: light-dark(#1a1d18, #f2f5ee);
+      --muted: light-dark(#646b61, #aeb7aa);
+      --line: light-dark(#a9afa5, #687064);
+      --border: light-dark(#d9ddd5, #3b4138);
+      --active: light-dark(#2463a7, #76b7ff);
+      --active-fill: light-dark(#e8f2fc, #152c40);
+      --waiting: light-dark(#a45b09, #ffbd72);
+      --waiting-fill: light-dark(#fff1dc, #3b2916);
+      --resume: light-dark(#7350a6, #c6a5ff);
+      --resume-fill: light-dark(#f1eafd, #2f2341);
+      --success: light-dark(#257143, #78d99b);
+      --success-fill: light-dark(#e8f6ed, #183224);
+      --danger: light-dark(#a53d3d, #ff9a94);
+      --danger-fill: light-dark(#fcebea, #3d2020);
+      --shadow: light-dark(rgba(28, 35, 25, .08), rgba(0, 0, 0, .28));
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 40px 0 56px;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 22px;
+    }
+
+    h1, h2, p { margin: 0; }
+    h1 { font-size: clamp(24px, 4vw, 38px); font-weight: 650; letter-spacing: -.025em; }
+    h2 { margin-bottom: 4px; font-size: 18px; font-weight: 650; }
+    .subtitle, .caption { color: var(--muted); }
+    .subtitle { margin-top: 6px; }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .legend i { display: block; width: 28px; border-top: 2px solid var(--line); }
+
+    section {
+      margin-top: 22px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--surface);
+      box-shadow: 0 12px 32px var(--shadow);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 10px;
+    }
+
+    svg { display: block; width: 100%; height: auto; overflow: visible; }
+    svg text { font-family: inherit; fill: var(--ink); }
+    .flow { fill: none; stroke: var(--line); stroke-width: 2; marker-end: url(#arrow); }
+    .flow.active { stroke: var(--active); }
+    .flow.waiting { stroke: var(--waiting); }
+    .flow.resume { stroke: var(--resume); }
+    .flow.danger { stroke: var(--danger); }
+    .flow.loop { stroke-width: 1.75; }
+    .edge-label { font-size: 13px; fill: var(--muted); }
+    .edge-label.strong { fill: var(--ink); font-weight: 600; }
+
+    .state rect, .step rect, .decision path {
+      stroke-width: 1.5;
+      filter: drop-shadow(0 4px 8px var(--shadow));
+    }
+
+    .state text.name, .step text.name { font-size: 16px; font-weight: 650; }
+    .state text.note, .step text.note { font-size: 12px; fill: var(--muted); }
+    .state.neutral rect, .step.neutral rect { fill: var(--surface-2); stroke: var(--border); }
+    .state.active rect, .step.active rect { fill: var(--active-fill); stroke: var(--active); }
+    .state.waiting rect, .step.waiting rect { fill: var(--waiting-fill); stroke: var(--waiting); }
+    .state.resume rect { fill: var(--resume-fill); stroke: var(--resume); }
+    .state.success rect { fill: var(--success-fill); stroke: var(--success); }
+    .state.danger rect { fill: var(--danger-fill); stroke: var(--danger); }
+    .state.terminal-muted rect { fill: var(--surface-2); stroke: var(--line); }
+
+    .decision path { fill: var(--surface-2); stroke: var(--border); }
+    .decision text { text-anchor: middle; font-size: 14px; font-weight: 650; }
+
+    .checkpoint { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 5 5; }
+    .checkpoint-title { font-size: 14px; font-weight: 650; }
+    .checkpoint-note { font-size: 12px; fill: var(--muted); }
+
+    .callout {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-left: 3px solid var(--resume);
+      background: var(--resume-fill);
+      color: var(--ink);
+    }
+
+    code { font: .92em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    @media (max-width: 720px) {
+      main { width: min(100% - 20px, 1180px); padding-top: 24px; }
+      header, .section-head { align-items: flex-start; flex-direction: column; }
+      .legend { justify-content: flex-start; }
+      section { padding: 12px; border-radius: 12px; overflow-x: auto; }
+      svg { min-width: 760px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Alfred agent state machine</h1>
+        <p class="subtitle">Run states, completion checkpoints, and resumption</p>
+      </div>
+      <div class="legend" aria-label="Diagram legend">
+        <span><i></i> implemented</span>
+      </div>
+    </header>
+
+    <section aria-labelledby="lifecycle-title">
+      <div class="section-head">
+        <div>
+          <h2 id="lifecycle-title">Run lifecycle</h2>
+          <p class="caption">A run pauses rather than terminates when external action can unblock it.</p>
+        </div>
+      </div>
+      <svg viewBox="0 0 1120 610" role="img" aria-labelledby="lifecycle-svg-title lifecycle-svg-desc">
+        <title id="lifecycle-svg-title">Alfred run lifecycle states</title>
+        <desc id="lifecycle-svg-desc">The dispatcher starts queued runs and owns active cancellation handles. Running can complete, fail, wait for approval, wait for input, or be interrupted. Waiting and interrupted runs resume through durable replay.</desc>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
+          </marker>
+        </defs>
+
+        <path class="flow active" d="M 260 170 H 430"></path>
+        <text class="edge-label strong" x="345" y="153" text-anchor="middle">Dispatch → Execute</text>
+
+        <path class="flow active" d="M 650 140 C 755 72 830 70 900 96"></path>
+        <text class="edge-label" x="770" y="68" text-anchor="middle">no tool calls remain</text>
+
+        <path class="flow danger" d="M 650 170 H 900"></path>
+        <text class="edge-label" x="775" y="153" text-anchor="middle">non-retryable error</text>
+
+        <path class="flow danger" d="M 650 200 C 755 266 832 270 900 244"></path>
+        <text class="edge-label" x="784" y="275" text-anchor="middle">CancelRun · any nonterminal state</text>
+
+        <path class="flow waiting" d="M 475 225 C 430 292 348 332 275 369"></path>
+        <text class="edge-label" x="360" y="307" text-anchor="middle">policy asks</text>
+
+        <path class="flow waiting" d="M 605 225 C 655 292 738 332 810 369"></path>
+        <text class="edge-label" x="840" y="327" text-anchor="middle">AskUser / input prompt</text>
+
+        <path class="flow resume" d="M 540 225 V 354"></path>
+        <text class="edge-label" x="553" y="295">retryable provider error</text>
+
+        <path class="flow active" d="M 275 421 C 355 475 454 315 493 226"></path>
+        <text class="edge-label" x="375" y="449" text-anchor="middle">approve / deny</text>
+
+        <path class="flow active" d="M 810 421 C 726 475 631 315 588 226"></path>
+        <text class="edge-label" x="706" y="449" text-anchor="middle">ProvideInput</text>
+
+        <path class="flow resume" d="M 540 444 V 226"></path>
+        <text class="edge-label" x="555" y="337">ResumeRun</text>
+
+        <path class="flow active loop" d="M 430 132 C 385 75 690 68 650 132"></path>
+        <text class="edge-label" x="540" y="71" text-anchor="middle">tool result → next model call</text>
+
+        <g class="state neutral" transform="translate(60 130)">
+          <rect width="200" height="80" rx="14"></rect>
+          <text class="name" x="100" y="34" text-anchor="middle">queued</text>
+          <text class="note" x="100" y="57" text-anchor="middle">run exists, not started</text>
+        </g>
+
+        <g class="state active" transform="translate(430 125)">
+          <rect width="220" height="100" rx="16"></rect>
+          <text class="name" x="110" y="40" text-anchor="middle">running</text>
+          <text class="note" x="110" y="64" text-anchor="middle">model ↔ tools loop</text>
+          <text class="note" x="110" y="82" text-anchor="middle">durable events + transient deltas</text>
+        </g>
+
+        <g class="state success" transform="translate(900 58)">
+          <rect width="170" height="76" rx="14"></rect>
+          <text class="name" x="85" y="32" text-anchor="middle">completed</text>
+          <text class="note" x="85" y="54" text-anchor="middle">terminal</text>
+        </g>
+
+        <g class="state danger" transform="translate(900 137)">
+          <rect width="170" height="76" rx="14"></rect>
+          <text class="name" x="85" y="32" text-anchor="middle">failed</text>
+          <text class="note" x="85" y="54" text-anchor="middle">terminal</text>
+        </g>
+
+        <g class="state terminal-muted" transform="translate(900 216)">
+          <rect width="170" height="76" rx="14"></rect>
+          <text class="name" x="85" y="32" text-anchor="middle">cancelled</text>
+          <text class="note" x="85" y="54" text-anchor="middle">terminal</text>
+        </g>
+
+        <g class="state waiting" transform="translate(80 354)">
+          <rect width="240" height="90" rx="15"></rect>
+          <text class="name" x="120" y="36" text-anchor="middle">waiting_for_approval</text>
+          <text class="note" x="120" y="61" text-anchor="middle">digest-bound request</text>
+        </g>
+
+        <g class="state resume" transform="translate(420 354)">
+          <rect width="240" height="90" rx="15"></rect>
+          <text class="name" x="120" y="36" text-anchor="middle">interrupted</text>
+          <text class="note" x="120" y="61" text-anchor="middle">recoverable external condition</text>
+        </g>
+
+        <g class="state waiting" transform="translate(760 354)">
+          <rect width="240" height="90" rx="15"></rect>
+          <text class="name" x="120" y="36" text-anchor="middle">waiting_for_input</text>
+          <text class="note" x="120" y="61" text-anchor="middle">user or tool-linked answer</text>
+        </g>
+
+        <rect class="checkpoint" x="100" y="520" width="920" height="78" rx="14"></rect>
+        <text class="checkpoint-title" x="560" y="547" text-anchor="middle">Durable replay checkpoint</text>
+        <text class="checkpoint-note" x="560" y="568" text-anchor="middle">ModelCallCompleted commits ordered messages, reasoning, and tool calls before execution.</text>
+        <text class="checkpoint-note" x="560" y="584" text-anchor="middle">ModelCallRecorded measures timing and usage. Continuation uses the semantic completion checkpoint.</text>
+      </svg>
+    </section>
+
+    <section aria-labelledby="loop-title">
+      <div class="section-head">
+        <div>
+          <h2 id="loop-title">Inside <code>running</code></h2>
+          <p class="caption">Every effectful tool crosses the same executor and policy boundary.</p>
+        </div>
+      </div>
+      <svg viewBox="0 0 1120 740" role="img" aria-labelledby="loop-svg-title loop-svg-desc">
+        <title id="loop-svg-title">The Alfred agent loop</title>
+        <desc id="loop-svg-desc">Context is built and durable progress replayed before a model stream. Successful output is committed before tool calls execute. No further calls completes the run. Retryable stream errors interrupt; other errors fail. Policy can allow, deny, or ask for approval. A tool input prompt waits for the user.</desc>
+        <defs>
+          <marker id="arrow-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
+          </marker>
+        </defs>
+
+        <style>
+          #running-loop .flow { marker-end: url(#arrow-loop); }
+        </style>
+        <g id="running-loop">
+          <path class="flow active" d="M 225 105 H 350"></path>
+          <path class="flow active" d="M 570 105 H 690"></path>
+          <path class="flow active" d="M 800 155 V 170"></path>
+          <path class="flow active" d="M 800 234 V 260"></path>
+          <text class="edge-label" x="812" y="252">tool calls</text>
+
+          <path class="flow active" d="M 910 202 C 940 175 950 145 980 130"></path>
+          <text class="edge-label" x="956" y="193" text-anchor="middle">no calls</text>
+
+          <path class="flow resume" d="M 690 105 C 620 120 590 160 590 205"></path>
+          <text class="edge-label" x="602" y="159" text-anchor="middle">retryable error</text>
+
+          <path class="flow danger" d="M 910 105 C 970 125 1010 170 1020 205"></path>
+          <text class="edge-label" x="1040" y="173" text-anchor="middle">non-retryable error</text>
+
+          <path class="flow active" d="M 695 320 C 630 345 600 400 565 477"></path>
+          <text class="edge-label" x="658" y="385" text-anchor="middle">allow</text>
+
+          <path class="flow waiting" d="M 800 380 V 440"></path>
+          <text class="edge-label" x="812" y="411">ask</text>
+
+          <path class="flow active" d="M 905 320 C 950 350 1000 400 1020 440"></path>
+          <text class="edge-label" x="945" y="385" text-anchor="middle">deny</text>
+
+          <path class="flow active" d="M 475 510 C 310 568 240 422 395 145"></path>
+          <text class="edge-label" x="285" y="501" text-anchor="middle">durable ToolResult</text>
+
+          <path class="flow active" d="M 950 510 C 830 580 550 590 460 145"></path>
+          <text class="edge-label" x="730" y="575" text-anchor="middle">model-visible error result</text>
+
+          <path class="flow active" d="M 390 145 C 185 210 180 450 385 477"></path>
+          <text class="edge-label" x="120" y="334">pending call first</text>
+
+          <g class="step neutral" transform="translate(25 65)">
+            <rect width="200" height="80" rx="14"></rect>
+            <text class="name" x="100" y="33" text-anchor="middle">Build context</text>
+            <text class="note" x="100" y="56" text-anchor="middle">instructions · history · tools</text>
+          </g>
+
+          <g class="step neutral" transform="translate(350 65)">
+            <rect width="220" height="80" rx="14"></rect>
+            <text class="name" x="110" y="33" text-anchor="middle">Replay run events</text>
+            <text class="note" x="110" y="56" text-anchor="middle">last durable continuation</text>
+          </g>
+
+          <g class="step active" transform="translate(690 55)">
+            <rect width="220" height="100" rx="16"></rect>
+            <text class="name" x="110" y="36" text-anchor="middle">Stream model</text>
+            <text class="note" x="110" y="61" text-anchor="middle">first event · first output · usage</text>
+            <text class="note" x="110" y="80" text-anchor="middle">complete ordered output</text>
+          </g>
+
+          <g class="step neutral" transform="translate(690 170)">
+            <rect width="220" height="64" rx="13"></rect>
+            <text class="name" x="110" y="27" text-anchor="middle">Commit output</text>
+            <text class="note" x="110" y="48" text-anchor="middle">ModelCallCompleted</text>
+          </g>
+
+          <g class="state success" transform="translate(980 68)">
+            <rect width="120" height="74" rx="13"></rect>
+            <text class="name" x="60" y="31" text-anchor="middle">completed</text>
+            <text class="note" x="60" y="53" text-anchor="middle">terminal</text>
+          </g>
+
+          <g class="state resume" transform="translate(500 205)">
+            <rect width="180" height="74" rx="13"></rect>
+            <text class="name" x="90" y="31" text-anchor="middle">interrupted</text>
+            <text class="note" x="90" y="53" text-anchor="middle">safe reason persisted</text>
+          </g>
+
+          <g class="state danger" transform="translate(940 205)">
+            <rect width="160" height="74" rx="13"></rect>
+            <text class="name" x="80" y="31" text-anchor="middle">failed</text>
+            <text class="note" x="80" y="53" text-anchor="middle">terminal</text>
+          </g>
+
+          <g class="decision" transform="translate(800 320)">
+            <path d="M 0 -60 L 105 0 L 0 60 L -105 0 Z"></path>
+            <text y="-5">Policy</text>
+            <text class="edge-label" y="17">one boundary</text>
+          </g>
+
+          <path class="flow waiting" d="M 475 514 V 615"></path>
+          <text class="edge-label" x="488" y="576">input prompt</text>
+          <g class="state waiting" transform="translate(355 615)">
+            <rect width="240" height="74" rx="13"></rect>
+            <text class="name" x="120" y="31" text-anchor="middle">waiting_for_input</text>
+            <text class="note" x="120" y="53" text-anchor="middle">ProvideInput → durable replay</text>
+          </g>
+
+          <g class="step active" transform="translate(385 440)">
+            <rect width="180" height="74" rx="13"></rect>
+            <text class="name" x="90" y="31" text-anchor="middle">Execute tool</text>
+            <text class="note" x="90" y="53" text-anchor="middle">registered implementation</text>
+          </g>
+
+          <g class="state waiting" transform="translate(690 440)">
+            <rect width="220" height="74" rx="13"></rect>
+            <text class="name" x="110" y="31" text-anchor="middle">waiting_for_approval</text>
+            <text class="note" x="110" y="53" text-anchor="middle">resolution resumes same run</text>
+          </g>
+
+          <g class="step neutral" transform="translate(940 440)">
+            <rect width="160" height="74" rx="13"></rect>
+            <text class="name" x="80" y="31" text-anchor="middle">Deny</text>
+            <text class="note" x="80" y="53" text-anchor="middle">do not invoke tool</text>
+          </g>
+        </g>
+      </svg>
+      <p class="callout"><strong>Replay rule:</strong> ModelCallCompleted admits ordered output before tools execute. ToolCallRequested or timing/usage records alone do not admit a call. Failed or incomplete streams leave no committed output.</p>
+    </section>
+    <section aria-labelledby="continuation-title">
+      <div class="section-head"><div>
+        <h2 id="continuation-title">Waiting and continuation</h2>
+        <p class="caption">External decisions continue the same run; a new conversation message creates another run.</p>
+      </div></div>
+      <ul>
+        <li><strong>Approval:</strong> ResolveApproval records a digest-bound decision before redispatch. Denial becomes a tool error result; approval is evaluated again through policy.</li>
+        <li><strong>AskUser:</strong> a tool returns an input prompt. The runner records InputRequested and waits. ProvideInput records the answer, which satisfies that tool call during replay.</li>
+        <li><strong>Interruption:</strong> retryable model-stream errors record a safe reason. ResumeRun accepts interrupted runs and uses their original model.</li>
+        <li><strong>Presentation:</strong> answer and readable-reasoning deltas are provisional. Clients reconcile completed output and never receive native replay fragments.</li>
+      </ul>
+      <p class="callout"><strong>Current limits:</strong> the default application allows tools without approval prompts. SDK policy can require approval. Service startup does not automatically redispatch unfinished runs, and a crash between an external tool effect and recording its result can leave an effect that replay cannot identify as complete. Cancellation stops execution; it does not undo effects.</p>
+      <p class="caption">See <a href="ARCHITECTURE.md">Architecture</a> for ownership and persistence, or <a href="tui.md">Terminal client</a> for commands and user workflows.</p>
+    </section>
+  </main>
+</body>
+</html>

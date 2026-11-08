@@ -1,0 +1,7 @@
+SELECT id, name, root, skill_trust, created_at_unix_nano
+FROM projects
+{{ if index .Flags "hasAfter" -}}
+WHERE (created_at_unix_nano, id) > (@after_created_at, @after_id)
+{{ end -}}
+ORDER BY created_at_unix_nano, id
+LIMIT @limit

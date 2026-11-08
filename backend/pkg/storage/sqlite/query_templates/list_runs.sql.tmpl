@@ -1,0 +1,15 @@
+SELECT
+    id,
+    invocation_id,
+    session_id,
+    default_provider_id,
+    default_model_id,
+    status,
+    created_at_unix_nano
+FROM runs
+WHERE session_id = @session_id
+{{ if index .Flags "hasAfter" -}}
+AND (created_at_unix_nano, id) > (@after_created_at, @after_id)
+{{ end -}}
+ORDER BY created_at_unix_nano, id
+LIMIT @limit

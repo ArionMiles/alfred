@@ -1,0 +1,5 @@
+.agentdesk/
+/docs/ROADMAP.md
+/bin/
+/dist/
+/backend/coverage.out

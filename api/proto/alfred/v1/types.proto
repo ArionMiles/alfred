@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package alfred.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// ProjectSkillTrust records whether project-provided skills may be loaded.
+enum ProjectSkillTrust {
+  PROJECT_SKILL_TRUST_UNSPECIFIED = 0;
+  PROJECT_SKILL_TRUST_UNKNOWN = 1;
+  PROJECT_SKILL_TRUST_TRUSTED = 2;
+  PROJECT_SKILL_TRUST_DENIED = 3;
+}
+
+// InvocationSource describes what caused an invocation.
+enum InvocationSource {
+  INVOCATION_SOURCE_UNSPECIFIED = 0;
+  INVOCATION_SOURCE_USER = 1;
+  INVOCATION_SOURCE_SCHEDULE = 2;
+  INVOCATION_SOURCE_WEBHOOK = 3;
+  INVOCATION_SOURCE_MONITOR = 4;
+  INVOCATION_SOURCE_INTERNAL = 5;
+}
+
+// RunStatus describes the lifecycle state of a run.
+enum RunStatus {
+  RUN_STATUS_UNSPECIFIED = 0;
+  RUN_STATUS_QUEUED = 1;
+  RUN_STATUS_RUNNING = 2;
+  RUN_STATUS_WAITING_FOR_APPROVAL = 3;
+  RUN_STATUS_WAITING_FOR_INPUT = 4;
+  RUN_STATUS_INTERRUPTED = 5;
+  RUN_STATUS_COMPLETED = 6;
+  RUN_STATUS_FAILED = 7;
+  RUN_STATUS_CANCELLED = 8;
+}
+
+// ApprovalOutcome describes how an approval request was resolved.
+enum ApprovalOutcome {
+  APPROVAL_OUTCOME_UNSPECIFIED = 0;
+  APPROVAL_OUTCOME_APPROVED = 1;
+  APPROVAL_OUTCOME_DENIED = 2;
+}
+
+// ContentKind identifies a content modality.
+enum ContentKind {
+  CONTENT_KIND_UNSPECIFIED = 0;
+  CONTENT_KIND_TEXT = 1;
+  CONTENT_KIND_IMAGE = 2;
+  CONTENT_KIND_AUDIO = 3;
+  CONTENT_KIND_VIDEO = 4;
+  CONTENT_KIND_FILE = 5;
+}
+
+// MessageRole identifies the author of a transcript message.
+enum MessageRole {
+  MESSAGE_ROLE_UNSPECIFIED = 0;
+  MESSAGE_ROLE_USER = 1;
+  MESSAGE_ROLE_ASSISTANT = 2;
+}
+
+// ResourceRef identifies content that Alfred can resolve.
+message ResourceRef {
+  string uri = 1;
+  string media_type = 2;
+  string name = 3;
+}
+
+// ResourceContent contains referenced non-text content.
+message ResourceContent {
+  ContentKind kind = 1;
+  ResourceRef resource = 2;
+}
+
+// ContentPart contains one part of multimodal content.
+message ContentPart {
+  oneof value {
+    string text = 1;
+    ResourceContent resource = 2;
+  }
+}
+
+// Message contains multimodal user or assistant content.
+message Message {
+  MessageRole role = 1;
+  repeated ContentPart content = 2;
+}
+
+// ToolCall is an immutable request to invoke a tool.
+message ToolCall {
+  string id = 1;
+  string run_id = 2;
+  string tool_id = 3;
+  bytes arguments_json = 4;
+}
+
+// ToolResult is the model-visible result of a tool call.
+message ToolResult {
+  string call_id = 1;
+  repeated ContentPart output = 2;
+  bool is_error = 3;
+}
+
+// ModelRef identifies a model and its configured provider.
+message ModelRef {
+  string provider_id = 1;
+  string model_id = 2;
+}
+
+// Project is a durable workspace and context boundary.
+message Project {
+  string id = 1;
+  string name = 2;
+  string root = 3;
+  ProjectSkillTrust skill_trust = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// Session is a durable context thread within one project.
+message Session {
+  string id = 1;
+  string project_id = 2;
+  string title = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// Run is one execution of the agent loop caused by an invocation.
+message Run {
+  string id = 1;
+  string invocation_id = 2;
+  string session_id = 3;
+  ModelRef default_model = 4;
+  RunStatus status = 5;
+  google.protobuf.Timestamp created_at = 6;
+}

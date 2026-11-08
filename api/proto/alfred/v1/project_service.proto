@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package alfred.v1;
+
+import "alfred/v1/types.proto";
+
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// ProjectService exposes project operations used by Alfred clients.
+service ProjectService {
+  // ResolveProject resolves a service-local directory to its project.
+  rpc ResolveProject(ResolveProjectRequest) returns (ResolveProjectResponse);
+  // InspectProjectSkills reports project skill roots without loading them.
+  rpc InspectProjectSkills(InspectProjectSkillsRequest) returns (InspectProjectSkillsResponse);
+  // SetProjectSkillTrust records whether project-provided skills may be loaded.
+  rpc SetProjectSkillTrust(SetProjectSkillTrustRequest) returns (SetProjectSkillTrustResponse);
+}
+
+// ResolveProjectRequest identifies a directory visible to the service.
+message ResolveProjectRequest {
+  string root = 1;
+}
+
+// ResolveProjectResponse contains the resolved project.
+message ResolveProjectResponse {
+  Project project = 1;
+}
+
+// InspectProjectSkillsRequest identifies the project to inspect.
+message InspectProjectSkillsRequest {
+  string project_id = 1;
+}
+
+// InspectProjectSkillsResponse describes existing project skill roots and their
+// current trust decision.
+message InspectProjectSkillsResponse {
+  string project_id = 1;
+  ProjectSkillTrust trust = 2;
+  repeated string roots = 3;
+}
+
+// SetProjectSkillTrustRequest contains the new trust decision for a project.
+message SetProjectSkillTrustRequest {
+  string project_id = 1;
+  ProjectSkillTrust trust = 2;
+}
+
+// SetProjectSkillTrustResponse acknowledges the persisted trust decision.
+message SetProjectSkillTrustResponse {}

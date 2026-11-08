@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package alfred.v1;
+
+import "alfred/v1/types.proto";
+
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// ModelService exposes configured models and the default for new runs.
+service ModelService {
+  // ListModels returns configured text-capable models, not verified account access.
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  // GetSelectedModel returns an unset model until a selection is saved.
+  rpc GetSelectedModel(GetSelectedModelRequest) returns (GetSelectedModelResponse);
+  // SelectModel validates and saves the default without changing existing runs.
+  rpc SelectModel(SelectModelRequest) returns (SelectModelResponse);
+}
+
+// ModelCapabilities describes published capabilities rather than client features.
+message ModelCapabilities {
+  repeated ContentKind input_modalities = 1;
+  repeated ContentKind output_modalities = 2;
+  uint64 context_window = 3;
+  uint64 max_output_tokens = 4;
+  bool tool_calling = 5;
+  bool reasoning = 6;
+}
+
+// ModelInfo includes the configured provider name for client model pickers.
+message ModelInfo {
+  ModelRef ref = 1;
+  string name = 2;
+  string provider_name = 3;
+  ModelCapabilities capabilities = 4;
+}
+
+// ListModelsRequest requests configured, supported model choices.
+message ListModelsRequest {}
+
+// ListModelsResponse contains choices ordered by model and provider name.
+message ListModelsResponse {
+  repeated ModelInfo models = 1;
+}
+
+// GetSelectedModelRequest requests the saved default.
+message GetSelectedModelRequest {}
+
+// GetSelectedModelResponse has no model when no preference is saved.
+message GetSelectedModelResponse {
+  ModelRef model = 1;
+}
+
+// SelectModelRequest identifies the default for subsequently created runs.
+message SelectModelRequest {
+  ModelRef model = 1;
+}
+
+// SelectModelResponse returns the saved reference.
+message SelectModelResponse {
+  ModelRef model = 1;
+}

@@ -1,0 +1,8 @@
+**
+!go.work
+!go.work.sum
+!backend/
+!backend/**
+!deploy/
+!deploy/config.toml
+backend/coverage.out

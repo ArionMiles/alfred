@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package alfred.v1;
+
+import "alfred/v1/types.proto";
+
+option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
+
+// InvocationService creates and dispatches durable runs.
+service InvocationService {
+  // Invoke accepts an invocation and returns its queued run.
+  rpc Invoke(InvokeRequest) returns (InvokeResponse);
+}
+
+// InvokeRequest asks Alfred to create and dispatch a run. An empty session_id
+// asks Alfred to create a new session in the project.
+message InvokeRequest {
+  string project_id = 1;
+  string session_id = 2;
+  InvocationSource source = 3;
+  repeated ContentPart input = 4;
+}
+
+// InvokeResponse contains the accepted durable run.
+message InvokeResponse {
+  Run run = 1;
+}
