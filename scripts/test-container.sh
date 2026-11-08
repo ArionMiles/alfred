@@ -3,7 +3,7 @@ set -eu
 
 project="alfred-test-$$"
 export ALFRED_IMAGE="alfred-test:$$" ALFRED_PORT=0
-compose() { docker compose -p "$project" "$@"; }
+compose() { docker compose -f deploy/docker-compose.yml -p "$project" "$@"; }
 cleanup() {
   result=$?
   if test "$result" -ne 0; then compose logs || true; fi
@@ -12,7 +12,7 @@ cleanup() {
   exit "$result"
 }
 trap cleanup EXIT
-compose build
+docker build -t "$ALFRED_IMAGE" .
 compose up -d --wait --wait-timeout 90
 endpoint="http://$(compose port alfred 8080)"
 resolve() {

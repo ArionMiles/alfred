@@ -24,6 +24,10 @@ the first client; web and native iOS clients will follow. Read
 - Do not add compatibility layers before they are needed. The public contracts
   may change freely before v1 as the design is refined.
 - Preserve unrelated user changes. Do not commit unless explicitly asked.
+- Follow [Tim Pope's commit-message style](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html)
+  for every commit: use a capitalized, imperative summary around 50 characters,
+  without a trailing period. Separate an optional body with a blank line, wrap
+  it around 72 columns, and explain the purpose and reasoning behind the change.
 - Follow the frozen work order in `docs/ROADMAP.md`. Reorder it only at the
   owner's explicit request. Docs refinement, package consolidation, and CI,
   releases, and installation packaging precede the initial commit; TUI

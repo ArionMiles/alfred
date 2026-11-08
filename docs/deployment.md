@@ -7,25 +7,33 @@ filesystem.
 
 ## Start Alfred
 
-From the checkout, start the daemon:
+In an empty directory, download the deployment files and start the daemon:
 
 ```sh
-docker compose up -d
+curl -fsSL https://raw.githubusercontent.com/ArionMiles/alfred/main/deploy/install.sh | bash
+docker compose up -d --wait
 ```
 
-Compose uses `ghcr.io/arionmiles/alfred:tip`. To build locally before images are
-published, run:
+The installer downloads `docker-compose.yml` and a default `config.toml` into
+the current directory. Running it again preserves an existing config file.
+Compose uses `ghcr.io/arionmiles/alfred:tip`.
+
+To build from a source checkout instead, run from the repository root:
 
 ```sh
-docker compose up -d --build
+docker build -t alfred:local .
+ALFRED_IMAGE=alfred:local docker compose -f deploy/docker-compose.yml up -d --wait
 ```
+
+The commands below assume the installer directory. In a source checkout, use
+`docker compose -f deploy/docker-compose.yml` in place of `docker compose`.
 
 Set `ALFRED_IMAGE` to select a versioned image or a pinned `tip-<sha>` build.
 Set `ALFRED_PORT` to change the host port from 8080. The published port is bound
 to the host's localhost. The daemon has no authentication; keep it on a trusted
 network.
 
-The supplied `deploy/config.toml` is mounted read-only. Edit that file for server
+The downloaded `config.toml` is mounted read-only. Edit that file for server
 settings and recreate the container after changing them. The image includes zsh,
 Git, curl, and CA certificates. The daemon runs as UID 1000 and owns its workspace
 in the data volume.
@@ -54,7 +62,8 @@ docker compose pull
 docker compose up -d
 ```
 
-For locally built images, use `docker compose up -d --build` instead.
+For a source checkout, rebuild with `docker build -t alfred:local .`, then run
+`ALFRED_IMAGE=alfred:local docker compose -f deploy/docker-compose.yml up -d`.
 
 ```sh
 docker compose logs -f alfred

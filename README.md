@@ -22,20 +22,35 @@ automation, and subscription sign-in are not implemented.
 
 ## Quick Start
 
-Install [Go](https://go.dev/dl/) at the version specified in
-[backend/go.mod](backend/go.mod), [Task](https://taskfile.dev/installation/),
-and zsh. From the repository root:
+### Homebrew
+
+Install Alfred with [Homebrew](https://brew.sh/):
 
 ```sh
-task build
+brew install --cask ArionMiles/tap/alfred
 ```
 
 Start Alfred from the project you want to work in:
 
 ```sh
 cd /path/to/your/project
-/path/to/alfred/bin/alfred
+alfred
 ```
+
+### Docker Compose
+
+With Docker and Compose installed, run this in an empty directory:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ArionMiles/alfred/main/deploy/install.sh | bash && docker compose up -d --wait && docker compose exec alfred alfred
+```
+
+The installer downloads `docker-compose.yml` and `config.toml`, preserving an
+existing config file. The commands start the daemon and open its TUI. Workspace
+files and saved settings persist in a Docker volume. See
+[Deployment](docs/deployment.md) for configuration, updates, and shutdown.
+
+### First conversation
 
 In the TUI:
 
@@ -74,10 +89,10 @@ Alfred is pre-alpha. Tagged releases publish Linux and macOS archives for amd64
 and arm64, SHA-256 checksums, and a Homebrew cask in
 [ArionMiles/tap](https://github.com/ArionMiles/homebrew-tap).
 
-After the first release from this codebase is published:
+To update an existing Homebrew installation:
 
 ```sh
-brew install --cask ArionMiles/tap/alfred
+brew upgrade --cask ArionMiles/tap/alfred
 ```
 
 Use an up-to-date Homebrew. macOS binaries are not notarized and may require
