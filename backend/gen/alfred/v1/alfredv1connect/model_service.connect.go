@@ -59,7 +59,7 @@ var (
 
 // ModelServiceClient is a client for the alfred.v1.ModelService service.
 type ModelServiceClient interface {
-	// ListModels returns configured text-capable models, not verified account access.
+	// ListModels returns configured text-capable models using each provider's availability rules.
 	ListModels(context.Context, *v1.ListModelsRequest) (*v1.ListModelsResponse, error)
 	// GetSelectedModel returns an unset model until a selection is saved.
 	GetSelectedModel(context.Context, *v1.GetSelectedModelRequest) (*v1.GetSelectedModelResponse, error)
@@ -75,7 +75,7 @@ func NewModelServiceClient(client *connect.Client) ModelServiceClient {
 
 // ModelServiceHandler is an implementation of the alfred.v1.ModelService service.
 type ModelServiceHandler interface {
-	// ListModels returns configured text-capable models, not verified account access.
+	// ListModels returns configured text-capable models using each provider's availability rules.
 	ListModels(context.Context, *v1.ListModelsRequest) (*v1.ListModelsResponse, error)
 	// GetSelectedModel returns an unset model until a selection is saved.
 	GetSelectedModel(context.Context, *v1.GetSelectedModelRequest) (*v1.GetSelectedModelResponse, error)

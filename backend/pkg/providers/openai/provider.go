@@ -3,10 +3,13 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"iter"
 	"net/http"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
@@ -29,9 +32,24 @@ func DefaultConfig() Config { return Config{BaseURL: "https://api.openai.com/v1"
 
 // Provider translates Alfred model requests to the Responses API.
 type Provider struct {
-	id      alfred.ProviderID
-	models  map[alfred.ModelID]alfred.ModelInfo
-	service responses.ResponseService
+	id           alfred.ProviderID
+	models       map[alfred.ModelID]alfred.ModelInfo
+	service      responses.ResponseService
+	subscription *subscriptionRuntime
+}
+
+type subscriptionRuntime struct {
+	credentials *SubscriptionCredentials
+	ref         alfred.CredentialRef
+	client      *http.Client
+	baseURL     string
+}
+
+// SubscriptionDependencies are runtime collaborators for ChatGPT-plan access.
+type SubscriptionDependencies struct {
+	Credentials   *SubscriptionCredentials
+	CredentialRef alfred.CredentialRef
+	HTTPClient    *http.Client
 }
 
 // New constructs an adapter using caller-supplied model metadata and transport.
@@ -51,6 +69,21 @@ func New(id alfred.ProviderID, config Config, models []alfred.ModelInfo, client 
 	}
 }
 
+// NewSubscription constructs an adapter backed by a renewable ChatGPT-plan token.
+func NewSubscription(
+	id alfred.ProviderID,
+	config Config,
+	models []alfred.ModelInfo,
+	dependencies SubscriptionDependencies,
+) *Provider {
+	provider := New(id, Config{BaseURL: config.BaseURL}, models, dependencies.HTTPClient)
+	provider.subscription = &subscriptionRuntime{
+		credentials: dependencies.Credentials, ref: dependencies.CredentialRef,
+		client: dependencies.HTTPClient, baseURL: strings.TrimRight(config.BaseURL, "/"),
+	}
+	return provider
+}
+
 // ID returns the configured provider identity.
 func (provider *Provider) ID() alfred.ProviderID { return provider.id }
 
@@ -60,6 +93,9 @@ func (provider *Provider) Models(ctx context.Context) ([]alfred.ModelInfo, error
 
 	if err := ctx.Err(); err != nil {
 		return nil, errors.B.Op(op).Err(err).Build()
+	}
+	if provider.subscription != nil {
+		return provider.subscriptionModels(ctx)
 	}
 	models := make([]alfred.ModelInfo, 0, len(provider.models))
 	for _, model := range provider.models {
@@ -76,7 +112,18 @@ func (provider *Provider) ResolveModel(ctx context.Context, id alfred.ModelID) (
 	if err := ctx.Err(); err != nil {
 		return alfred.ModelInfo{}, errors.B.Op(op).Err(err).Build()
 	}
-	model, ok := provider.models[id]
+	models := provider.models
+	if provider.subscription != nil {
+		listed, err := provider.subscriptionModels(ctx)
+		if err != nil {
+			return alfred.ModelInfo{}, errors.B.Op(op).Err(err).Build()
+		}
+		models = make(map[alfred.ModelID]alfred.ModelInfo, len(listed))
+		for _, model := range listed {
+			models[model.Ref.ModelID] = model
+		}
+	}
+	model, ok := models[id]
 	if !ok {
 		return alfred.ModelInfo{}, errors.B.Op(op).KindNotFound().UserMsg("the requested OpenAI model is not available").Build()
 	}
@@ -94,7 +141,16 @@ func (provider *Provider) Stream(ctx context.Context, request alfred.ModelReques
 			yield(alfred.ModelEvent{}, err)
 			return
 		}
-		stream := provider.service.NewStreaming(ctx, prepared.params)
+		var requestOptions []option.RequestOption
+		if provider.subscription != nil {
+			token, err := provider.subscription.credentials.AccessToken(ctx, provider.subscription.ref)
+			if err != nil {
+				yield(alfred.ModelEvent{}, errors.B.Op(op).Err(err).Build())
+				return
+			}
+			requestOptions = append(requestOptions, option.WithAPIKey(token))
+		}
+		stream := provider.service.NewStreaming(ctx, prepared.params, requestOptions...)
 		defer func() { _ = stream.Close() }()
 		indices := make(map[[2]int64]uint32)
 		reasoningIndices := make(map[[3]int64]uint32)
@@ -132,6 +188,58 @@ func (provider *Provider) Stream(ctx context.Context, request alfred.ModelReques
 		yield(alfred.ModelEvent{}, errors.B.Op(op).KindBadGateway().Retryable(true).
 			UserMsg("The OpenAI stream ended before the response completed.").Build())
 	}
+}
+
+func (provider *Provider) subscriptionModels(ctx context.Context) ([]alfred.ModelInfo, error) {
+	const op = "subscriptionModels"
+
+	runtime := provider.subscription
+	token, err := runtime.credentials.AccessToken(ctx, runtime.ref)
+	if err != nil {
+		return nil, errors.B.Op(op).Err(err).Build()
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, runtime.baseURL+"/models", nil)
+	if err != nil {
+		return nil, errors.B.Op(op).Text("create OpenAI subscription model request").Err(err).Build()
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := runtime.client.Do(request)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, errors.B.Op(op).Err(ctx.Err()).Build()
+		}
+		return nil, errors.B.Op(op).KindUnavailable().Retryable(true).
+			UserMsg("OpenAI models could not be loaded. Try again.").Build()
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		return nil, errors.B.Op(op).Err(subscriptionHTTPError(response)).Build()
+	}
+	var catalog struct {
+		Models []struct {
+			Slug        string `json:"slug"`
+			DisplayName string `json:"display_name"`
+			Visibility  string `json:"visibility"`
+		} `json:"models"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&catalog); err != nil {
+		return nil, errors.B.Op(op).KindBadGateway().UserMsg("OpenAI returned an invalid model catalog.").Build()
+	}
+	models := make([]alfred.ModelInfo, 0, len(catalog.Models))
+	for _, listed := range catalog.Models {
+		if listed.Visibility != "list" {
+			continue
+		}
+		model, exists := provider.models[alfred.ModelID(listed.Slug)]
+		if !exists {
+			continue
+		}
+		if listed.DisplayName != "" {
+			model.Name = listed.DisplayName
+		}
+		models = append(models, cloneModel(model))
+	}
+	return models, nil
 }
 
 func reasoningDelta(event responses.ResponseStreamEventUnion, indices map[[3]int64]uint32, nextIndex *uint32) alfred.ModelReasoningDelta {

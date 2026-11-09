@@ -26,6 +26,7 @@ import (
 	"github.com/ArionMiles/alfred/pkg/invocation"
 	"github.com/ArionMiles/alfred/pkg/project"
 	"github.com/ArionMiles/alfred/pkg/providers"
+	openaiAuthorization "github.com/ArionMiles/alfred/pkg/providers/openai"
 	"github.com/ArionMiles/alfred/pkg/skills"
 	"github.com/ArionMiles/alfred/pkg/storage/jsonl"
 	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
@@ -37,8 +38,9 @@ import (
 )
 
 type application struct {
-	server *daemon.Server
-	store  *sqlite.Store
+	server                *daemon.Server
+	store                 *sqlite.Store
+	providerAuthorization *openaiAuthorization.AuthorizationService
 }
 
 func main() {
@@ -160,7 +162,14 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 	catalogConfig.CacheFile = filepath.Join(dataDir, "models.dev.json")
 	providerRegistry, err := providers.NewRegistry(
 		nil,
-		providers.WithConfiguredProviders(store, store, catalogConfig, &http.Client{Timeout: 15 * time.Second}, http.DefaultClient),
+		providers.WithConfiguredProviders(openaiAuthorization.NewResolver(
+			store, store,
+			openaiAuthorization.NewSubscriptionCredentials(
+				store, openaiAuthorization.DefaultAuthorizationConfig(), webClient, clock,
+			),
+			providers.NewCatalogSource(catalogConfig, &http.Client{Timeout: 15 * time.Second}),
+			http.DefaultClient,
+		)),
 		providers.WithMiddleware(telemetry.ModelCalls(clock, eventSink)),
 	)
 	if err != nil {
@@ -207,6 +216,14 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 		return nil, compositionError("create provider setup service", err, store, owner)
 	}
 	providerSubmitter := providers.NewSubmitter(providerSetup, store, identity.Generator[alfred.CredentialRef]{})
+	providerAuthorization := openaiAuthorization.NewAuthorizationService(
+		ctx,
+		openaiAuthorization.DefaultAuthorizationConfig(),
+		openaiAuthorization.AuthorizationDependencies{
+			Store: store, Credentials: store, IDs: identity.Generator[alfred.ProviderAuthorizationID]{},
+			References: identity.Generator[alfred.CredentialRef]{}, Clock: clock, HTTPClient: webClient,
+		},
+	)
 	modelService := providers.NewModelService(store, providerRegistry, store)
 	status := rpc.NewDaemonHandler(owner.InstanceID(), owner.StartedAt())
 	handler := rpc.NewServer(rpc.Handlers{
@@ -216,20 +233,21 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 		Invocation:    rpc.NewInvocationHandler(invocationService),
 		Session:       rpc.NewSessionHandler(store, eventStore, broker),
 		Run:           rpc.NewRunHandler(store, dispatcher),
-		ProviderSetup: rpc.NewProviderSetupHandler(providerSetup, providerSubmitter, store),
+		ProviderSetup: rpc.NewProviderSetupHandler(providerSetup, providerSubmitter, store, providerAuthorization),
 		Models:        rpc.NewModelHandler(modelService),
 	})
 	server, err := daemon.NewServer(ctx, daemonConfig(settings), owner, handler, status)
 	if err != nil {
 		return nil, compositionError("create daemon server", err, store, owner)
 	}
-	return &application{server: server, store: store}, nil
+	return &application{server: server, store: store, providerAuthorization: providerAuthorization}, nil
 }
 
 func (app *application) Serve(ctx context.Context) error {
 	const op = "Serve"
 
 	serveErr := app.server.Serve(ctx)
+	app.providerAuthorization.Close()
 	closeErr := app.store.Close()
 	if serveErr != nil || closeErr != nil {
 		return errors.B.Op(op).Err(serveErr).Err(closeErr).Build()

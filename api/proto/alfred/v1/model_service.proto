@@ -8,7 +8,7 @@ option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
 
 // ModelService exposes configured models and the default for new runs.
 service ModelService {
-  // ListModels returns configured text-capable models, not verified account access.
+  // ListModels returns configured text-capable models using each provider's availability rules.
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
   // GetSelectedModel returns an unset model until a selection is saved.
   rpc GetSelectedModel(GetSelectedModelRequest) returns (GetSelectedModelResponse);
@@ -37,7 +37,7 @@ message ModelInfo {
 // ListModelsRequest requests configured, supported model choices.
 message ListModelsRequest {}
 
-// ListModelsResponse contains choices ordered by model and provider name.
+// ListModelsResponse preserves each configured provider's returned model order.
 message ListModelsResponse {
   repeated ModelInfo models = 1;
 }

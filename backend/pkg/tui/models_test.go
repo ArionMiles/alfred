@@ -177,7 +177,8 @@ func TestModelPickerLoadingEmptyErrorAndUnavailableStates(t *testing.T) {
 	}
 	empty, _ := model.Update(modelsListedMsg{picker: model.models})
 	model = empty.(Model)
-	if !strings.Contains(model.View().Content, "No models available") || !strings.Contains(model.View().Content, "/providers") {
+	if !strings.Contains(model.View().Content, "Connect a model provider") || !strings.Contains(model.View().Content, "/providers") ||
+		strings.Contains(model.View().Content, "OpenAI") {
 		t.Fatal("empty picker did not explain how to set up a provider")
 	}
 	opened, _ = model.openModels()

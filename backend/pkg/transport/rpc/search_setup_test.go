@@ -41,7 +41,7 @@ func TestSearchSetupIsSeparateFromModelProvidersAndFeedsExa(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	alfredv1connect.RegisterProviderSetupServiceHandler(server, NewProviderSetupHandler(modelSetup, providers.NewSubmitter(modelSetup, store, identity.Generator[alfred.CredentialRef]{}), store))
+	alfredv1connect.RegisterProviderSetupServiceHandler(server, NewProviderSetupHandler(modelSetup, providers.NewSubmitter(modelSetup, store, identity.Generator[alfred.CredentialRef]{}), store, nil))
 	clients := NewClients(connect.NewClient(connectinprocess.New(server)))
 	definitions, err := clients.ProviderSetup.ListProviderDefinitions(t.Context(), &alfredv1.ListProviderDefinitionsRequest{})
 	if err != nil {

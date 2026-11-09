@@ -24,8 +24,9 @@ func TestSubmitSavesCredentialSeparatelyFromDatabaseMetadata(t *testing.T) {
 	if err != nil || result.Instance == nil {
 		t.Fatalf("Submit() = %+v, %v", result, err)
 	}
-	instance, err := store.GetProviderInstance(t.Context(), "personal")
-	if err != nil || instance.CredentialRef == "" || instance.Settings["base_url"] != "https://example.com/v1" {
+	instance, err := store.GetProviderInstance(t.Context(), "openai")
+	if err != nil || instance.CredentialRef == "" || instance.Name != "OpenAI" || !instance.Enabled ||
+		instance.Settings["base_url"] != "https://example.com/v1" {
 		t.Fatalf("saved instance = %+v, %v", instance, err)
 	}
 	if _, exists := instance.Settings["api_key"]; exists {
@@ -39,12 +40,26 @@ func TestSubmitSavesCredentialSeparatelyFromDatabaseMetadata(t *testing.T) {
 	if _, err := submitter.Submit(t.Context(), store, apiKeySubmission()); err != nil {
 		t.Fatalf("replace credential error = %v", err)
 	}
-	instance, err = store.GetProviderInstance(t.Context(), "personal")
+	instance, err = store.GetProviderInstance(t.Context(), "openai")
 	if err != nil || instance.CredentialRef == firstRef {
 		t.Fatal("replacement did not use a fresh reference")
 	}
 	if _, err := store.GetCredential(t.Context(), firstRef); err != nil {
 		t.Fatalf("previous credential was deleted: %v", err)
+	}
+}
+
+func TestSubmitPreservesExistingEnabledState(t *testing.T) {
+	t.Parallel()
+	store, submitter := newSubmitter(t)
+	if err := store.PutProviderInstance(t.Context(), alfred.ProviderInstance{
+		ID: "openai", Type: "openai", Name: "Old client-supplied name", Enabled: false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := submitter.Submit(t.Context(), store, apiKeySubmission())
+	if err != nil || result.Instance == nil || result.Instance.Enabled || result.Instance.Name != "OpenAI" {
+		t.Fatalf("Submit() = %+v, %v", result, err)
 	}
 }
 
@@ -57,7 +72,7 @@ func TestSubmitValidationDoesNotPersistInstance(t *testing.T) {
 	if err != nil || result.Instance != nil || len(result.FieldErrors) != 1 {
 		t.Fatalf("invalid submission = %+v, %v", result, err)
 	}
-	if _, err := store.GetProviderInstance(t.Context(), request.ID); errors.WhatKind(err) != errors.NotFound {
+	if _, err := store.GetProviderInstance(t.Context(), alfred.ProviderID(request.Type)); errors.WhatKind(err) != errors.NotFound {
 		t.Fatalf("invalid form created an instance: %v", err)
 	}
 }
@@ -71,8 +86,8 @@ func TestSubmitMetadataFailureCleansOnlyNewCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := mocks.NewMockProviderInstanceStore(gomock.NewController(t))
-	target.EXPECT().GetProviderInstance(gomock.Any(), alfred.ProviderID("personal")).Return(alfred.ProviderInstance{
-		ID: "personal", Type: "openai", CredentialRef: "previous",
+	target.EXPECT().GetProviderInstance(gomock.Any(), alfred.ProviderID("openai")).Return(alfred.ProviderInstance{
+		ID: "openai", Type: "openai", CredentialRef: "previous",
 	}, nil)
 	var fresh alfred.CredentialRef
 	target.EXPECT().PutProviderInstance(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -117,7 +132,7 @@ func newSubmitter(t *testing.T) (*sqlite.Store, *providers.Submitter) {
 
 func apiKeySubmission() alfred.ProviderSetupSubmission {
 	return alfred.ProviderSetupSubmission{
-		ID: "personal", Type: "openai", MethodID: "api-key", Name: "Personal", Enabled: true,
+		Type: "openai", MethodID: "api-key",
 		Values: map[string]string{"api_key": "test-secret", "base_url": "https://example.com/v1"},
 	}
 }

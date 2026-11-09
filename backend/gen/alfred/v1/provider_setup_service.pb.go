@@ -21,12 +21,120 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ProviderSetupMethod declares an ordered form such as API-key authentication.
+type ProviderSetupMethodKind int32
+
+const (
+	ProviderSetupMethodKind_PROVIDER_SETUP_METHOD_KIND_UNSPECIFIED   ProviderSetupMethodKind = 0
+	ProviderSetupMethodKind_PROVIDER_SETUP_METHOD_KIND_FORM          ProviderSetupMethodKind = 1
+	ProviderSetupMethodKind_PROVIDER_SETUP_METHOD_KIND_AUTHORIZATION ProviderSetupMethodKind = 2
+)
+
+// Enum value maps for ProviderSetupMethodKind.
+var (
+	ProviderSetupMethodKind_name = map[int32]string{
+		0: "PROVIDER_SETUP_METHOD_KIND_UNSPECIFIED",
+		1: "PROVIDER_SETUP_METHOD_KIND_FORM",
+		2: "PROVIDER_SETUP_METHOD_KIND_AUTHORIZATION",
+	}
+	ProviderSetupMethodKind_value = map[string]int32{
+		"PROVIDER_SETUP_METHOD_KIND_UNSPECIFIED":   0,
+		"PROVIDER_SETUP_METHOD_KIND_FORM":          1,
+		"PROVIDER_SETUP_METHOD_KIND_AUTHORIZATION": 2,
+	}
+)
+
+func (x ProviderSetupMethodKind) Enum() *ProviderSetupMethodKind {
+	p := new(ProviderSetupMethodKind)
+	*p = x
+	return p
+}
+
+func (x ProviderSetupMethodKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProviderSetupMethodKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_alfred_v1_provider_setup_service_proto_enumTypes[0].Descriptor()
+}
+
+func (ProviderSetupMethodKind) Type() protoreflect.EnumType {
+	return &file_alfred_v1_provider_setup_service_proto_enumTypes[0]
+}
+
+func (x ProviderSetupMethodKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProviderSetupMethodKind.Descriptor instead.
+func (ProviderSetupMethodKind) EnumDescriptor() ([]byte, []int) {
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{0}
+}
+
+type ProviderAuthorizationState int32
+
+const (
+	ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_UNSPECIFIED ProviderAuthorizationState = 0
+	ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_PENDING     ProviderAuthorizationState = 1
+	ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_COMPLETED   ProviderAuthorizationState = 2
+	ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_DENIED      ProviderAuthorizationState = 3
+	ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_FAILED      ProviderAuthorizationState = 4
+	ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_CANCELED    ProviderAuthorizationState = 5
+)
+
+// Enum value maps for ProviderAuthorizationState.
+var (
+	ProviderAuthorizationState_name = map[int32]string{
+		0: "PROVIDER_AUTHORIZATION_STATE_UNSPECIFIED",
+		1: "PROVIDER_AUTHORIZATION_STATE_PENDING",
+		2: "PROVIDER_AUTHORIZATION_STATE_COMPLETED",
+		3: "PROVIDER_AUTHORIZATION_STATE_DENIED",
+		4: "PROVIDER_AUTHORIZATION_STATE_FAILED",
+		5: "PROVIDER_AUTHORIZATION_STATE_CANCELED",
+	}
+	ProviderAuthorizationState_value = map[string]int32{
+		"PROVIDER_AUTHORIZATION_STATE_UNSPECIFIED": 0,
+		"PROVIDER_AUTHORIZATION_STATE_PENDING":     1,
+		"PROVIDER_AUTHORIZATION_STATE_COMPLETED":   2,
+		"PROVIDER_AUTHORIZATION_STATE_DENIED":      3,
+		"PROVIDER_AUTHORIZATION_STATE_FAILED":      4,
+		"PROVIDER_AUTHORIZATION_STATE_CANCELED":    5,
+	}
+)
+
+func (x ProviderAuthorizationState) Enum() *ProviderAuthorizationState {
+	p := new(ProviderAuthorizationState)
+	*p = x
+	return p
+}
+
+func (x ProviderAuthorizationState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProviderAuthorizationState) Descriptor() protoreflect.EnumDescriptor {
+	return file_alfred_v1_provider_setup_service_proto_enumTypes[1].Descriptor()
+}
+
+func (ProviderAuthorizationState) Type() protoreflect.EnumType {
+	return &file_alfred_v1_provider_setup_service_proto_enumTypes[1]
+}
+
+func (x ProviderAuthorizationState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProviderAuthorizationState.Descriptor instead.
+func (ProviderAuthorizationState) EnumDescriptor() ([]byte, []int) {
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{1}
+}
+
+// ProviderSetupMethod declares an ordered form or interactive authorization flow.
 type ProviderSetupMethod struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Fields        []*SetupField          `protobuf:"bytes,3,rep,name=fields,proto3" json:"fields,omitempty"`
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Id            string                  `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                  `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Fields        []*SetupField           `protobuf:"bytes,3,rep,name=fields,proto3" json:"fields,omitempty"`
+	Kind          ProviderSetupMethodKind `protobuf:"varint,4,opt,name=kind,proto3,enum=alfred.v1.ProviderSetupMethodKind" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -82,6 +190,97 @@ func (x *ProviderSetupMethod) GetFields() []*SetupField {
 	return nil
 }
 
+func (x *ProviderSetupMethod) GetKind() ProviderSetupMethodKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ProviderSetupMethodKind_PROVIDER_SETUP_METHOD_KIND_UNSPECIFIED
+}
+
+type ProviderAuthorization struct {
+	state            protoimpl.MessageState     `protogen:"open.v1"`
+	Id               string                     `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	State            ProviderAuthorizationState `protobuf:"varint,2,opt,name=state,proto3,enum=alfred.v1.ProviderAuthorizationState" json:"state,omitempty"`
+	AuthorizationUrl string                     `protobuf:"bytes,3,opt,name=authorization_url,json=authorizationUrl,proto3" json:"authorization_url,omitempty"`
+	AccountLabel     string                     `protobuf:"bytes,4,opt,name=account_label,json=accountLabel,proto3" json:"account_label,omitempty"`
+	Message          string                     `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	Instance         *ProviderInstance          `protobuf:"bytes,6,opt,name=instance,proto3" json:"instance,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ProviderAuthorization) Reset() {
+	*x = ProviderAuthorization{}
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProviderAuthorization) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProviderAuthorization) ProtoMessage() {}
+
+func (x *ProviderAuthorization) ProtoReflect() protoreflect.Message {
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProviderAuthorization.ProtoReflect.Descriptor instead.
+func (*ProviderAuthorization) Descriptor() ([]byte, []int) {
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ProviderAuthorization) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ProviderAuthorization) GetState() ProviderAuthorizationState {
+	if x != nil {
+		return x.State
+	}
+	return ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_UNSPECIFIED
+}
+
+func (x *ProviderAuthorization) GetAuthorizationUrl() string {
+	if x != nil {
+		return x.AuthorizationUrl
+	}
+	return ""
+}
+
+func (x *ProviderAuthorization) GetAccountLabel() string {
+	if x != nil {
+		return x.AccountLabel
+	}
+	return ""
+}
+
+func (x *ProviderAuthorization) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ProviderAuthorization) GetInstance() *ProviderInstance {
+	if x != nil {
+		return x.Instance
+	}
+	return nil
+}
+
 // ProviderDefinition lists the setup methods offered by an implementation.
 type ProviderDefinition struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -94,7 +293,7 @@ type ProviderDefinition struct {
 
 func (x *ProviderDefinition) Reset() {
 	*x = ProviderDefinition{}
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[1]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -106,7 +305,7 @@ func (x *ProviderDefinition) String() string {
 func (*ProviderDefinition) ProtoMessage() {}
 
 func (x *ProviderDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[1]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -119,7 +318,7 @@ func (x *ProviderDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderDefinition.ProtoReflect.Descriptor instead.
 func (*ProviderDefinition) Descriptor() ([]byte, []int) {
-	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{1}
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ProviderDefinition) GetType() string {
@@ -156,7 +355,7 @@ type ProviderSetupForm struct {
 
 func (x *ProviderSetupForm) Reset() {
 	*x = ProviderSetupForm{}
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[2]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -168,7 +367,7 @@ func (x *ProviderSetupForm) String() string {
 func (*ProviderSetupForm) ProtoMessage() {}
 
 func (x *ProviderSetupForm) ProtoReflect() protoreflect.Message {
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[2]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -181,7 +380,7 @@ func (x *ProviderSetupForm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderSetupForm.ProtoReflect.Descriptor instead.
 func (*ProviderSetupForm) Descriptor() ([]byte, []int) {
-	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{2}
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ProviderSetupForm) GetType() string {
@@ -226,7 +425,7 @@ type ProviderInstance struct {
 
 func (x *ProviderInstance) Reset() {
 	*x = ProviderInstance{}
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[3]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -238,7 +437,7 @@ func (x *ProviderInstance) String() string {
 func (*ProviderInstance) ProtoMessage() {}
 
 func (x *ProviderInstance) ProtoReflect() protoreflect.Message {
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[3]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -251,7 +450,7 @@ func (x *ProviderInstance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderInstance.ProtoReflect.Descriptor instead.
 func (*ProviderInstance) Descriptor() ([]byte, []int) {
-	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{3}
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ProviderInstance) GetId() string {
@@ -298,7 +497,7 @@ type ListProviderDefinitionsRequest struct {
 
 func (x *ListProviderDefinitionsRequest) Reset() {
 	*x = ListProviderDefinitionsRequest{}
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[4]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -310,7 +509,7 @@ func (x *ListProviderDefinitionsRequest) String() string {
 func (*ListProviderDefinitionsRequest) ProtoMessage() {}
 
 func (x *ListProviderDefinitionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[4]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -323,7 +522,7 @@ func (x *ListProviderDefinitionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProviderDefinitionsRequest.ProtoReflect.Descriptor instead.
 func (*ListProviderDefinitionsRequest) Descriptor() ([]byte, []int) {
-	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{4}
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{5}
 }
 
 // ListProviderDefinitionsResponse contains definitions, not runtime availability.
@@ -336,7 +535,7 @@ type ListProviderDefinitionsResponse struct {
 
 func (x *ListProviderDefinitionsResponse) Reset() {
 	*x = ListProviderDefinitionsResponse{}
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[5]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -348,7 +547,7 @@ func (x *ListProviderDefinitionsResponse) String() string {
 func (*ListProviderDefinitionsResponse) ProtoMessage() {}
 
 func (x *ListProviderDefinitionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[5]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -361,7 +560,7 @@ func (x *ListProviderDefinitionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProviderDefinitionsResponse.ProtoReflect.Descriptor instead.
 func (*ListProviderDefinitionsResponse) Descriptor() ([]byte, []int) {
-	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{5}
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListProviderDefinitionsResponse) GetDefinitions() []*ProviderDefinition {
@@ -371,20 +570,18 @@ func (x *ListProviderDefinitionsResponse) GetDefinitions() []*ProviderDefinition
 	return nil
 }
 
-// PrepareProviderSetupRequest selects a method and optionally an existing instance.
-// A supplied instance_id must exist and match the requested provider type.
+// PrepareProviderSetupRequest selects a method for the provider's configured instance.
 type PrepareProviderSetupRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	MethodId      string                 `protobuf:"bytes,2,opt,name=method_id,json=methodId,proto3" json:"method_id,omitempty"`
-	InstanceId    string                 `protobuf:"bytes,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PrepareProviderSetupRequest) Reset() {
 	*x = PrepareProviderSetupRequest{}
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[6]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -396,7 +593,7 @@ func (x *PrepareProviderSetupRequest) String() string {
 func (*PrepareProviderSetupRequest) ProtoMessage() {}
 
 func (x *PrepareProviderSetupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[6]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -409,7 +606,7 @@ func (x *PrepareProviderSetupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareProviderSetupRequest.ProtoReflect.Descriptor instead.
 func (*PrepareProviderSetupRequest) Descriptor() ([]byte, []int) {
-	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{6}
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PrepareProviderSetupRequest) GetType() string {
@@ -426,13 +623,6 @@ func (x *PrepareProviderSetupRequest) GetMethodId() string {
 	return ""
 }
 
-func (x *PrepareProviderSetupRequest) GetInstanceId() string {
-	if x != nil {
-		return x.InstanceId
-	}
-	return ""
-}
-
 // PrepareProviderSetupResponse contains the selected form.
 type PrepareProviderSetupResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -443,7 +633,7 @@ type PrepareProviderSetupResponse struct {
 
 func (x *PrepareProviderSetupResponse) Reset() {
 	*x = PrepareProviderSetupResponse{}
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[7]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -455,7 +645,7 @@ func (x *PrepareProviderSetupResponse) String() string {
 func (*PrepareProviderSetupResponse) ProtoMessage() {}
 
 func (x *PrepareProviderSetupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[7]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -468,7 +658,7 @@ func (x *PrepareProviderSetupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareProviderSetupResponse.ProtoReflect.Descriptor instead.
 func (*PrepareProviderSetupResponse) Descriptor() ([]byte, []int) {
-	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{7}
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *PrepareProviderSetupResponse) GetForm() *ProviderSetupForm {
@@ -478,24 +668,22 @@ func (x *PrepareProviderSetupResponse) GetForm() *ProviderSetupForm {
 	return nil
 }
 
-// SubmitProviderSetupRequest replaces one instance's selected-method settings.
+// SubmitProviderSetupRequest replaces the provider's selected-method settings.
+// The service owns the configured instance identity, display name, and defaults.
 // Values can contain secrets and must never be logged or added to session events.
 // Existing API-key connections require reentry of the key on submission.
 type SubmitProviderSetupRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	MethodId      string                 `protobuf:"bytes,3,opt,name=method_id,json=methodId,proto3" json:"method_id,omitempty"`
-	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	Enabled       bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	Values        map[string]string      `protobuf:"bytes,6,rep,name=values,proto3" json:"values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	MethodId      string                 `protobuf:"bytes,2,opt,name=method_id,json=methodId,proto3" json:"method_id,omitempty"`
+	Values        map[string]string      `protobuf:"bytes,3,rep,name=values,proto3" json:"values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitProviderSetupRequest) Reset() {
 	*x = SubmitProviderSetupRequest{}
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[8]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -507,7 +695,7 @@ func (x *SubmitProviderSetupRequest) String() string {
 func (*SubmitProviderSetupRequest) ProtoMessage() {}
 
 func (x *SubmitProviderSetupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[8]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -520,14 +708,7 @@ func (x *SubmitProviderSetupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitProviderSetupRequest.ProtoReflect.Descriptor instead.
 func (*SubmitProviderSetupRequest) Descriptor() ([]byte, []int) {
-	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *SubmitProviderSetupRequest) GetInstanceId() string {
-	if x != nil {
-		return x.InstanceId
-	}
-	return ""
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SubmitProviderSetupRequest) GetType() string {
@@ -542,20 +723,6 @@ func (x *SubmitProviderSetupRequest) GetMethodId() string {
 		return x.MethodId
 	}
 	return ""
-}
-
-func (x *SubmitProviderSetupRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *SubmitProviderSetupRequest) GetEnabled() bool {
-	if x != nil {
-		return x.Enabled
-	}
-	return false
 }
 
 func (x *SubmitProviderSetupRequest) GetValues() map[string]string {
@@ -577,7 +744,7 @@ type SubmitProviderSetupResponse struct {
 
 func (x *SubmitProviderSetupResponse) Reset() {
 	*x = SubmitProviderSetupResponse{}
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[9]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -589,7 +756,7 @@ func (x *SubmitProviderSetupResponse) String() string {
 func (*SubmitProviderSetupResponse) ProtoMessage() {}
 
 func (x *SubmitProviderSetupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[9]
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -602,7 +769,7 @@ func (x *SubmitProviderSetupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitProviderSetupResponse.ProtoReflect.Descriptor instead.
 func (*SubmitProviderSetupResponse) Descriptor() ([]byte, []int) {
-	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{9}
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SubmitProviderSetupResponse) GetInstance() *ProviderInstance {
@@ -619,15 +786,295 @@ func (x *SubmitProviderSetupResponse) GetFieldErrors() []*SetupFieldError {
 	return nil
 }
 
+type StartProviderAuthorizationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	MethodId      string                 `protobuf:"bytes,2,opt,name=method_id,json=methodId,proto3" json:"method_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartProviderAuthorizationRequest) Reset() {
+	*x = StartProviderAuthorizationRequest{}
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartProviderAuthorizationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartProviderAuthorizationRequest) ProtoMessage() {}
+
+func (x *StartProviderAuthorizationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartProviderAuthorizationRequest.ProtoReflect.Descriptor instead.
+func (*StartProviderAuthorizationRequest) Descriptor() ([]byte, []int) {
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *StartProviderAuthorizationRequest) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *StartProviderAuthorizationRequest) GetMethodId() string {
+	if x != nil {
+		return x.MethodId
+	}
+	return ""
+}
+
+type StartProviderAuthorizationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Authorization *ProviderAuthorization `protobuf:"bytes,1,opt,name=authorization,proto3" json:"authorization,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartProviderAuthorizationResponse) Reset() {
+	*x = StartProviderAuthorizationResponse{}
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartProviderAuthorizationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartProviderAuthorizationResponse) ProtoMessage() {}
+
+func (x *StartProviderAuthorizationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartProviderAuthorizationResponse.ProtoReflect.Descriptor instead.
+func (*StartProviderAuthorizationResponse) Descriptor() ([]byte, []int) {
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *StartProviderAuthorizationResponse) GetAuthorization() *ProviderAuthorization {
+	if x != nil {
+		return x.Authorization
+	}
+	return nil
+}
+
+type GetProviderAuthorizationRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	AuthorizationId string                 `protobuf:"bytes,1,opt,name=authorization_id,json=authorizationId,proto3" json:"authorization_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *GetProviderAuthorizationRequest) Reset() {
+	*x = GetProviderAuthorizationRequest{}
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProviderAuthorizationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProviderAuthorizationRequest) ProtoMessage() {}
+
+func (x *GetProviderAuthorizationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProviderAuthorizationRequest.ProtoReflect.Descriptor instead.
+func (*GetProviderAuthorizationRequest) Descriptor() ([]byte, []int) {
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetProviderAuthorizationRequest) GetAuthorizationId() string {
+	if x != nil {
+		return x.AuthorizationId
+	}
+	return ""
+}
+
+type GetProviderAuthorizationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Authorization *ProviderAuthorization `protobuf:"bytes,1,opt,name=authorization,proto3" json:"authorization,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetProviderAuthorizationResponse) Reset() {
+	*x = GetProviderAuthorizationResponse{}
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProviderAuthorizationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProviderAuthorizationResponse) ProtoMessage() {}
+
+func (x *GetProviderAuthorizationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProviderAuthorizationResponse.ProtoReflect.Descriptor instead.
+func (*GetProviderAuthorizationResponse) Descriptor() ([]byte, []int) {
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GetProviderAuthorizationResponse) GetAuthorization() *ProviderAuthorization {
+	if x != nil {
+		return x.Authorization
+	}
+	return nil
+}
+
+type CancelProviderAuthorizationRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	AuthorizationId string                 `protobuf:"bytes,1,opt,name=authorization_id,json=authorizationId,proto3" json:"authorization_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *CancelProviderAuthorizationRequest) Reset() {
+	*x = CancelProviderAuthorizationRequest{}
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelProviderAuthorizationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelProviderAuthorizationRequest) ProtoMessage() {}
+
+func (x *CancelProviderAuthorizationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelProviderAuthorizationRequest.ProtoReflect.Descriptor instead.
+func (*CancelProviderAuthorizationRequest) Descriptor() ([]byte, []int) {
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CancelProviderAuthorizationRequest) GetAuthorizationId() string {
+	if x != nil {
+		return x.AuthorizationId
+	}
+	return ""
+}
+
+type CancelProviderAuthorizationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Authorization *ProviderAuthorization `protobuf:"bytes,1,opt,name=authorization,proto3" json:"authorization,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelProviderAuthorizationResponse) Reset() {
+	*x = CancelProviderAuthorizationResponse{}
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelProviderAuthorizationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelProviderAuthorizationResponse) ProtoMessage() {}
+
+func (x *CancelProviderAuthorizationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_alfred_v1_provider_setup_service_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelProviderAuthorizationResponse.ProtoReflect.Descriptor instead.
+func (*CancelProviderAuthorizationResponse) Descriptor() ([]byte, []int) {
+	return file_alfred_v1_provider_setup_service_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CancelProviderAuthorizationResponse) GetAuthorization() *ProviderAuthorization {
+	if x != nil {
+		return x.Authorization
+	}
+	return nil
+}
+
 var File_alfred_v1_provider_setup_service_proto protoreflect.FileDescriptor
 
 const file_alfred_v1_provider_setup_service_proto_rawDesc = "" +
 	"\n" +
-	"&alfred/v1/provider_setup_service.proto\x12\talfred.v1\x1a\x15alfred/v1/setup.proto\"h\n" +
+	"&alfred/v1/provider_setup_service.proto\x12\talfred.v1\x1a\x15alfred/v1/setup.proto\"\xa0\x01\n" +
 	"\x13ProviderSetupMethod\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12-\n" +
-	"\x06fields\x18\x03 \x03(\v2\x15.alfred.v1.SetupFieldR\x06fields\"v\n" +
+	"\x06fields\x18\x03 \x03(\v2\x15.alfred.v1.SetupFieldR\x06fields\x126\n" +
+	"\x04kind\x18\x04 \x01(\x0e2\".alfred.v1.ProviderSetupMethodKindR\x04kind\"\x89\x02\n" +
+	"\x15ProviderAuthorization\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12;\n" +
+	"\x05state\x18\x02 \x01(\x0e2%.alfred.v1.ProviderAuthorizationStateR\x05state\x12+\n" +
+	"\x11authorization_url\x18\x03 \x01(\tR\x10authorizationUrl\x12#\n" +
+	"\raccount_label\x18\x04 \x01(\tR\faccountLabel\x12\x18\n" +
+	"\amessage\x18\x05 \x01(\tR\amessage\x127\n" +
+	"\binstance\x18\x06 \x01(\v2\x1b.alfred.v1.ProviderInstanceR\binstance\"v\n" +
 	"\x12ProviderDefinition\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x128\n" +
@@ -652,32 +1099,53 @@ const file_alfred_v1_provider_setup_service_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\" \n" +
 	"\x1eListProviderDefinitionsRequest\"b\n" +
 	"\x1fListProviderDefinitionsResponse\x12?\n" +
-	"\vdefinitions\x18\x01 \x03(\v2\x1d.alfred.v1.ProviderDefinitionR\vdefinitions\"o\n" +
+	"\vdefinitions\x18\x01 \x03(\v2\x1d.alfred.v1.ProviderDefinitionR\vdefinitions\"N\n" +
 	"\x1bPrepareProviderSetupRequest\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1b\n" +
-	"\tmethod_id\x18\x02 \x01(\tR\bmethodId\x12\x1f\n" +
-	"\vinstance_id\x18\x03 \x01(\tR\n" +
-	"instanceId\"P\n" +
+	"\tmethod_id\x18\x02 \x01(\tR\bmethodId\"P\n" +
 	"\x1cPrepareProviderSetupResponse\x120\n" +
-	"\x04form\x18\x01 \x01(\v2\x1c.alfred.v1.ProviderSetupFormR\x04form\"\xa2\x02\n" +
-	"\x1aSubmitProviderSetupRequest\x12\x1f\n" +
-	"\vinstance_id\x18\x01 \x01(\tR\n" +
-	"instanceId\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1b\n" +
-	"\tmethod_id\x18\x03 \x01(\tR\bmethodId\x12\x12\n" +
-	"\x04name\x18\x04 \x01(\tR\x04name\x12\x18\n" +
-	"\aenabled\x18\x05 \x01(\bR\aenabled\x12I\n" +
-	"\x06values\x18\x06 \x03(\v21.alfred.v1.SubmitProviderSetupRequest.ValuesEntryR\x06values\x1a9\n" +
+	"\x04form\x18\x01 \x01(\v2\x1c.alfred.v1.ProviderSetupFormR\x04form\"\xd3\x01\n" +
+	"\x1aSubmitProviderSetupRequest\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1b\n" +
+	"\tmethod_id\x18\x02 \x01(\tR\bmethodId\x12I\n" +
+	"\x06values\x18\x03 \x03(\v21.alfred.v1.SubmitProviderSetupRequest.ValuesEntryR\x06values\x1a9\n" +
 	"\vValuesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x01\n" +
 	"\x1bSubmitProviderSetupResponse\x127\n" +
 	"\binstance\x18\x01 \x01(\v2\x1b.alfred.v1.ProviderInstanceR\binstance\x12=\n" +
-	"\ffield_errors\x18\x02 \x03(\v2\x1a.alfred.v1.SetupFieldErrorR\vfieldErrors2\xd7\x02\n" +
+	"\ffield_errors\x18\x02 \x03(\v2\x1a.alfred.v1.SetupFieldErrorR\vfieldErrors\"T\n" +
+	"!StartProviderAuthorizationRequest\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1b\n" +
+	"\tmethod_id\x18\x02 \x01(\tR\bmethodId\"l\n" +
+	"\"StartProviderAuthorizationResponse\x12F\n" +
+	"\rauthorization\x18\x01 \x01(\v2 .alfred.v1.ProviderAuthorizationR\rauthorization\"L\n" +
+	"\x1fGetProviderAuthorizationRequest\x12)\n" +
+	"\x10authorization_id\x18\x01 \x01(\tR\x0fauthorizationId\"j\n" +
+	" GetProviderAuthorizationResponse\x12F\n" +
+	"\rauthorization\x18\x01 \x01(\v2 .alfred.v1.ProviderAuthorizationR\rauthorization\"O\n" +
+	"\"CancelProviderAuthorizationRequest\x12)\n" +
+	"\x10authorization_id\x18\x01 \x01(\tR\x0fauthorizationId\"m\n" +
+	"#CancelProviderAuthorizationResponse\x12F\n" +
+	"\rauthorization\x18\x01 \x01(\v2 .alfred.v1.ProviderAuthorizationR\rauthorization*\x98\x01\n" +
+	"\x17ProviderSetupMethodKind\x12*\n" +
+	"&PROVIDER_SETUP_METHOD_KIND_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fPROVIDER_SETUP_METHOD_KIND_FORM\x10\x01\x12,\n" +
+	"(PROVIDER_SETUP_METHOD_KIND_AUTHORIZATION\x10\x02*\x9d\x02\n" +
+	"\x1aProviderAuthorizationState\x12,\n" +
+	"(PROVIDER_AUTHORIZATION_STATE_UNSPECIFIED\x10\x00\x12(\n" +
+	"$PROVIDER_AUTHORIZATION_STATE_PENDING\x10\x01\x12*\n" +
+	"&PROVIDER_AUTHORIZATION_STATE_COMPLETED\x10\x02\x12'\n" +
+	"#PROVIDER_AUTHORIZATION_STATE_DENIED\x10\x03\x12'\n" +
+	"#PROVIDER_AUTHORIZATION_STATE_FAILED\x10\x04\x12)\n" +
+	"%PROVIDER_AUTHORIZATION_STATE_CANCELED\x10\x052\xc5\x05\n" +
 	"\x14ProviderSetupService\x12p\n" +
 	"\x17ListProviderDefinitions\x12).alfred.v1.ListProviderDefinitionsRequest\x1a*.alfred.v1.ListProviderDefinitionsResponse\x12g\n" +
 	"\x14PrepareProviderSetup\x12&.alfred.v1.PrepareProviderSetupRequest\x1a'.alfred.v1.PrepareProviderSetupResponse\x12d\n" +
-	"\x13SubmitProviderSetup\x12%.alfred.v1.SubmitProviderSetupRequest\x1a&.alfred.v1.SubmitProviderSetupResponseB5Z3github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1b\x06proto3"
+	"\x13SubmitProviderSetup\x12%.alfred.v1.SubmitProviderSetupRequest\x1a&.alfred.v1.SubmitProviderSetupResponse\x12y\n" +
+	"\x1aStartProviderAuthorization\x12,.alfred.v1.StartProviderAuthorizationRequest\x1a-.alfred.v1.StartProviderAuthorizationResponse\x12s\n" +
+	"\x18GetProviderAuthorization\x12*.alfred.v1.GetProviderAuthorizationRequest\x1a+.alfred.v1.GetProviderAuthorizationResponse\x12|\n" +
+	"\x1bCancelProviderAuthorization\x12-.alfred.v1.CancelProviderAuthorizationRequest\x1a..alfred.v1.CancelProviderAuthorizationResponseB5Z3github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1b\x06proto3"
 
 var (
 	file_alfred_v1_provider_setup_service_proto_rawDescOnce sync.Once
@@ -691,46 +1159,68 @@ func file_alfred_v1_provider_setup_service_proto_rawDescGZIP() []byte {
 	return file_alfred_v1_provider_setup_service_proto_rawDescData
 }
 
-var file_alfred_v1_provider_setup_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_alfred_v1_provider_setup_service_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_alfred_v1_provider_setup_service_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_alfred_v1_provider_setup_service_proto_goTypes = []any{
-	(*ProviderSetupMethod)(nil),             // 0: alfred.v1.ProviderSetupMethod
-	(*ProviderDefinition)(nil),              // 1: alfred.v1.ProviderDefinition
-	(*ProviderSetupForm)(nil),               // 2: alfred.v1.ProviderSetupForm
-	(*ProviderInstance)(nil),                // 3: alfred.v1.ProviderInstance
-	(*ListProviderDefinitionsRequest)(nil),  // 4: alfred.v1.ListProviderDefinitionsRequest
-	(*ListProviderDefinitionsResponse)(nil), // 5: alfred.v1.ListProviderDefinitionsResponse
-	(*PrepareProviderSetupRequest)(nil),     // 6: alfred.v1.PrepareProviderSetupRequest
-	(*PrepareProviderSetupResponse)(nil),    // 7: alfred.v1.PrepareProviderSetupResponse
-	(*SubmitProviderSetupRequest)(nil),      // 8: alfred.v1.SubmitProviderSetupRequest
-	(*SubmitProviderSetupResponse)(nil),     // 9: alfred.v1.SubmitProviderSetupResponse
-	nil,                                     // 10: alfred.v1.ProviderSetupForm.ValuesEntry
-	nil,                                     // 11: alfred.v1.ProviderInstance.SettingsEntry
-	nil,                                     // 12: alfred.v1.SubmitProviderSetupRequest.ValuesEntry
-	(*SetupField)(nil),                      // 13: alfred.v1.SetupField
-	(*SetupFieldError)(nil),                 // 14: alfred.v1.SetupFieldError
+	(ProviderSetupMethodKind)(0),                // 0: alfred.v1.ProviderSetupMethodKind
+	(ProviderAuthorizationState)(0),             // 1: alfred.v1.ProviderAuthorizationState
+	(*ProviderSetupMethod)(nil),                 // 2: alfred.v1.ProviderSetupMethod
+	(*ProviderAuthorization)(nil),               // 3: alfred.v1.ProviderAuthorization
+	(*ProviderDefinition)(nil),                  // 4: alfred.v1.ProviderDefinition
+	(*ProviderSetupForm)(nil),                   // 5: alfred.v1.ProviderSetupForm
+	(*ProviderInstance)(nil),                    // 6: alfred.v1.ProviderInstance
+	(*ListProviderDefinitionsRequest)(nil),      // 7: alfred.v1.ListProviderDefinitionsRequest
+	(*ListProviderDefinitionsResponse)(nil),     // 8: alfred.v1.ListProviderDefinitionsResponse
+	(*PrepareProviderSetupRequest)(nil),         // 9: alfred.v1.PrepareProviderSetupRequest
+	(*PrepareProviderSetupResponse)(nil),        // 10: alfred.v1.PrepareProviderSetupResponse
+	(*SubmitProviderSetupRequest)(nil),          // 11: alfred.v1.SubmitProviderSetupRequest
+	(*SubmitProviderSetupResponse)(nil),         // 12: alfred.v1.SubmitProviderSetupResponse
+	(*StartProviderAuthorizationRequest)(nil),   // 13: alfred.v1.StartProviderAuthorizationRequest
+	(*StartProviderAuthorizationResponse)(nil),  // 14: alfred.v1.StartProviderAuthorizationResponse
+	(*GetProviderAuthorizationRequest)(nil),     // 15: alfred.v1.GetProviderAuthorizationRequest
+	(*GetProviderAuthorizationResponse)(nil),    // 16: alfred.v1.GetProviderAuthorizationResponse
+	(*CancelProviderAuthorizationRequest)(nil),  // 17: alfred.v1.CancelProviderAuthorizationRequest
+	(*CancelProviderAuthorizationResponse)(nil), // 18: alfred.v1.CancelProviderAuthorizationResponse
+	nil,                     // 19: alfred.v1.ProviderSetupForm.ValuesEntry
+	nil,                     // 20: alfred.v1.ProviderInstance.SettingsEntry
+	nil,                     // 21: alfred.v1.SubmitProviderSetupRequest.ValuesEntry
+	(*SetupField)(nil),      // 22: alfred.v1.SetupField
+	(*SetupFieldError)(nil), // 23: alfred.v1.SetupFieldError
 }
 var file_alfred_v1_provider_setup_service_proto_depIdxs = []int32{
-	13, // 0: alfred.v1.ProviderSetupMethod.fields:type_name -> alfred.v1.SetupField
-	0,  // 1: alfred.v1.ProviderDefinition.methods:type_name -> alfred.v1.ProviderSetupMethod
-	0,  // 2: alfred.v1.ProviderSetupForm.method:type_name -> alfred.v1.ProviderSetupMethod
-	10, // 3: alfred.v1.ProviderSetupForm.values:type_name -> alfred.v1.ProviderSetupForm.ValuesEntry
-	11, // 4: alfred.v1.ProviderInstance.settings:type_name -> alfred.v1.ProviderInstance.SettingsEntry
-	1,  // 5: alfred.v1.ListProviderDefinitionsResponse.definitions:type_name -> alfred.v1.ProviderDefinition
-	2,  // 6: alfred.v1.PrepareProviderSetupResponse.form:type_name -> alfred.v1.ProviderSetupForm
-	12, // 7: alfred.v1.SubmitProviderSetupRequest.values:type_name -> alfred.v1.SubmitProviderSetupRequest.ValuesEntry
-	3,  // 8: alfred.v1.SubmitProviderSetupResponse.instance:type_name -> alfred.v1.ProviderInstance
-	14, // 9: alfred.v1.SubmitProviderSetupResponse.field_errors:type_name -> alfred.v1.SetupFieldError
-	4,  // 10: alfred.v1.ProviderSetupService.ListProviderDefinitions:input_type -> alfred.v1.ListProviderDefinitionsRequest
-	6,  // 11: alfred.v1.ProviderSetupService.PrepareProviderSetup:input_type -> alfred.v1.PrepareProviderSetupRequest
-	8,  // 12: alfred.v1.ProviderSetupService.SubmitProviderSetup:input_type -> alfred.v1.SubmitProviderSetupRequest
-	5,  // 13: alfred.v1.ProviderSetupService.ListProviderDefinitions:output_type -> alfred.v1.ListProviderDefinitionsResponse
-	7,  // 14: alfred.v1.ProviderSetupService.PrepareProviderSetup:output_type -> alfred.v1.PrepareProviderSetupResponse
-	9,  // 15: alfred.v1.ProviderSetupService.SubmitProviderSetup:output_type -> alfred.v1.SubmitProviderSetupResponse
-	13, // [13:16] is the sub-list for method output_type
-	10, // [10:13] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	22, // 0: alfred.v1.ProviderSetupMethod.fields:type_name -> alfred.v1.SetupField
+	0,  // 1: alfred.v1.ProviderSetupMethod.kind:type_name -> alfred.v1.ProviderSetupMethodKind
+	1,  // 2: alfred.v1.ProviderAuthorization.state:type_name -> alfred.v1.ProviderAuthorizationState
+	6,  // 3: alfred.v1.ProviderAuthorization.instance:type_name -> alfred.v1.ProviderInstance
+	2,  // 4: alfred.v1.ProviderDefinition.methods:type_name -> alfred.v1.ProviderSetupMethod
+	2,  // 5: alfred.v1.ProviderSetupForm.method:type_name -> alfred.v1.ProviderSetupMethod
+	19, // 6: alfred.v1.ProviderSetupForm.values:type_name -> alfred.v1.ProviderSetupForm.ValuesEntry
+	20, // 7: alfred.v1.ProviderInstance.settings:type_name -> alfred.v1.ProviderInstance.SettingsEntry
+	4,  // 8: alfred.v1.ListProviderDefinitionsResponse.definitions:type_name -> alfred.v1.ProviderDefinition
+	5,  // 9: alfred.v1.PrepareProviderSetupResponse.form:type_name -> alfred.v1.ProviderSetupForm
+	21, // 10: alfred.v1.SubmitProviderSetupRequest.values:type_name -> alfred.v1.SubmitProviderSetupRequest.ValuesEntry
+	6,  // 11: alfred.v1.SubmitProviderSetupResponse.instance:type_name -> alfred.v1.ProviderInstance
+	23, // 12: alfred.v1.SubmitProviderSetupResponse.field_errors:type_name -> alfred.v1.SetupFieldError
+	3,  // 13: alfred.v1.StartProviderAuthorizationResponse.authorization:type_name -> alfred.v1.ProviderAuthorization
+	3,  // 14: alfred.v1.GetProviderAuthorizationResponse.authorization:type_name -> alfred.v1.ProviderAuthorization
+	3,  // 15: alfred.v1.CancelProviderAuthorizationResponse.authorization:type_name -> alfred.v1.ProviderAuthorization
+	7,  // 16: alfred.v1.ProviderSetupService.ListProviderDefinitions:input_type -> alfred.v1.ListProviderDefinitionsRequest
+	9,  // 17: alfred.v1.ProviderSetupService.PrepareProviderSetup:input_type -> alfred.v1.PrepareProviderSetupRequest
+	11, // 18: alfred.v1.ProviderSetupService.SubmitProviderSetup:input_type -> alfred.v1.SubmitProviderSetupRequest
+	13, // 19: alfred.v1.ProviderSetupService.StartProviderAuthorization:input_type -> alfred.v1.StartProviderAuthorizationRequest
+	15, // 20: alfred.v1.ProviderSetupService.GetProviderAuthorization:input_type -> alfred.v1.GetProviderAuthorizationRequest
+	17, // 21: alfred.v1.ProviderSetupService.CancelProviderAuthorization:input_type -> alfred.v1.CancelProviderAuthorizationRequest
+	8,  // 22: alfred.v1.ProviderSetupService.ListProviderDefinitions:output_type -> alfred.v1.ListProviderDefinitionsResponse
+	10, // 23: alfred.v1.ProviderSetupService.PrepareProviderSetup:output_type -> alfred.v1.PrepareProviderSetupResponse
+	12, // 24: alfred.v1.ProviderSetupService.SubmitProviderSetup:output_type -> alfred.v1.SubmitProviderSetupResponse
+	14, // 25: alfred.v1.ProviderSetupService.StartProviderAuthorization:output_type -> alfred.v1.StartProviderAuthorizationResponse
+	16, // 26: alfred.v1.ProviderSetupService.GetProviderAuthorization:output_type -> alfred.v1.GetProviderAuthorizationResponse
+	18, // 27: alfred.v1.ProviderSetupService.CancelProviderAuthorization:output_type -> alfred.v1.CancelProviderAuthorizationResponse
+	22, // [22:28] is the sub-list for method output_type
+	16, // [16:22] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_alfred_v1_provider_setup_service_proto_init() }
@@ -744,13 +1234,14 @@ func file_alfred_v1_provider_setup_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alfred_v1_provider_setup_service_proto_rawDesc), len(file_alfred_v1_provider_setup_service_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   13,
+			NumEnums:      2,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_alfred_v1_provider_setup_service_proto_goTypes,
 		DependencyIndexes: file_alfred_v1_provider_setup_service_proto_depIdxs,
+		EnumInfos:         file_alfred_v1_provider_setup_service_proto_enumTypes,
 		MessageInfos:      file_alfred_v1_provider_setup_service_proto_msgTypes,
 	}.Build()
 	File_alfred_v1_provider_setup_service_proto = out.File

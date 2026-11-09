@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{.Title}} · {{.AgentName}}</title>
+  <style>
+    :root { color-scheme: light dark; --paper: #f7f8f4; --ink: #20291f; --muted: #5e685b; --line: #d4dbd0; --accent: #456d3d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 system-ui, sans-serif; }
+    main { width: min(100% - 48px, 720px); margin: 0 auto; min-height: 100svh; display: flex; flex-direction: column; justify-content: center; padding: 48px 0; }
+    .brand { font-size: 18px; font-weight: 650; letter-spacing: -.02em; margin-bottom: 72px; }
+    .status { color: var(--accent); font-size: 12px; font-weight: 650; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { font-size: clamp(36px, 7vw, 58px); font-weight: 550; letter-spacing: -.045em; line-height: 1.08; max-width: 12ch; margin: 20px 0 24px; }
+    p { color: var(--muted); max-width: 50ch; margin: 0; }
+    footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+    @media (prefers-color-scheme: dark) { :root { --paper: #171d17; --ink: #e5ebe0; --muted: #acb6a6; --line: #343e31; --accent: #a6c995; } }
+    @media (max-width: 480px) { .brand { margin-bottom: 48px; } main { width: calc(100% - 40px); } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">{{.AgentName}}</div>
+    <div class="status">OpenAI connection</div>
+    <h1>{{.Title}}</h1>
+    <p>{{.Message}}</p>
+    <footer>You can close this browser tab.</footer>
+  </main>
+</body>
+</html>

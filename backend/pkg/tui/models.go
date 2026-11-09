@@ -194,7 +194,7 @@ func (model Model) modelPickerView() string {
 	case len(model.palette.Items()) == 0 && picker.err != nil:
 		return "Models\n\nCould not load models: " + userErrorMessage(picker.err) + "\nDismiss and reopen to retry."
 	case len(model.palette.Items()) == 0:
-		return "Models\n\nNo models available.\nConnect OpenAI in Providers (/providers), then reopen Models."
+		return "Models\n\nNo models available.\nConnect a model provider in Providers (/providers), then reopen Models."
 	}
 	body := model.palette.View()
 	if picker.unavailable {

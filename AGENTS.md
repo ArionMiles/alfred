@@ -19,15 +19,28 @@ the first client; web and native iOS clients will follow. Read
   expose missing requirements.
 - Do not add external dependencies unless the current step requires one and the
   choice has been discussed.
+- Before implementing a helper, survey the Go standard library and established,
+  maintained libraries, including suitable dependencies already in the module
+  graph. Present the viable choices, their tradeoffs, and why a dependency or
+  custom helper would be useful before implementation. Do not add the dependency
+  or helper until the owner has reviewed that choice; prefer a library when it
+  already owns the protocol or behavior correctly.
 - Do not introduce a dependency-injection framework. Assemble dependencies
   explicitly in `backend/cmd/alfred/main.go`.
 - Do not add compatibility layers before they are needed. The public contracts
   may change freely before v1 as the design is refined.
 - Preserve unrelated user changes. Do not commit unless explicitly asked.
-- Follow [Tim Pope's commit-message style](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html)
-  for every commit: use a capitalized, imperative summary around 50 characters,
-  without a trailing period. Separate an optional body with a blank line, wrap
-  it around 72 columns, and explain the purpose and reasoning behind the change.
+- Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+  together with [Tim Pope's commit-message style](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html)
+  for every new commit. Format the subject as `type(optional-scope): Description`,
+  using a lowercase type such as `feat`, `fix`, `refactor`, `docs`, `test`, or
+  `chore`, and a capitalized, imperative description without a trailing period.
+  Aim for a complete subject around 50 characters, including the prefix.
+  Separate an optional body with a blank line, wrap it around 72 columns, and
+  explain the purpose and reasoning behind the change. Mark breaking changes
+  with `!` before the colon and explain them in a `BREAKING CHANGE:` footer.
+  For example: `feat(openai): Add subscription access`. Do not rewrite existing
+  commit messages merely to adopt this convention.
 - Follow the frozen work order in `docs/ROADMAP.md`. Reorder it only at the
   owner's explicit request. Docs refinement, package consolidation, and CI,
   releases, and installation packaging precede the initial commit; TUI
@@ -111,9 +124,17 @@ the first client; web and native iOS clients will follow. Read
   skill discovery. It is derived startup state, excluded from TOML decoding.
 - Do not introduce indirection merely to make a pattern possible. If a wrapper
   makes a type appear to contain or delegate to itself, reconsider the layer.
-- A mutex must correspond to genuinely shared mutable state. Localize it to the
-  component that owns that state, and prefer durable conditional transitions
-  for lifecycle correctness across processes.
+- Before adding any mutex, lock, semaphore, singleflight mechanism, or equivalent
+  synchronization, tell the owner exactly which mutable state it protects, which
+  concurrent actors access that state, and why that concurrency is a real and
+  likely Alfred workflow. Present simpler ownership or durable-transition
+  alternatives and obtain owner review before implementation. Do not add
+  synchronization for unsupported, speculative, or merely theoretically
+  possible concurrent workflows.
+- Every approved mutex must be localized to the component that owns the protected
+  state and named for that state rather than generically. Keep its critical
+  section narrow, document the non-obvious invariant, and prefer durable
+  conditional transitions for correctness that must span processes.
 - Telemetry is observational and must not become a correctness dependency.
   Persist separate semantic checkpoints when replay or state recovery requires
   them.
@@ -195,6 +216,12 @@ the first client; web and native iOS clients will follow. Read
   Approval policy is replaceable middleware around that boundary.
 - MCP is a tool discovery/invocation adapter. Once discovered, MCP tools enter
   the same registry and execution-policy path as built-in tools.
+- Treat provider-managed conversation continuation as an optional adapter
+  optimization, not the authority for conversation state. Use a continuation
+  handle only when the provider capability and the compatible history prefix,
+  provider instance, model, and credential are known; otherwise replay Alfred's
+  durable history. Provider retention, handle expiry, or continuation failure
+  must not make a recoverable session unusable.
 - Clients communicate with the background service through a shared contract.
   They do not read storage or invoke the agent loop directly.
 - Local clients use the same HTTP RPC mode as future web and native clients;
@@ -223,6 +250,13 @@ the first client; web and native iOS clients will follow. Read
   translate them into Alfred's own theme schema.
 - JSONL is the authoritative transcript/event record. SQLite owns mutable
   application state and rebuildable transcript/telemetry projections.
+- Store sparse, durable application state that does not warrant its own domain
+  schema in one shared SQLite-backed JSON key-value store. Namespace keys by
+  the owning subsystem and keep string keys behind typed, consumer-owned
+  accessors. Do not create single-purpose tables or sidecar files for values
+  such as stable provider host identifiers. Do not use the key-value store for
+  domain entities, credentials, provider-instance settings, or replayable
+  history merely because it is convenient.
 
 ## Change discipline
 

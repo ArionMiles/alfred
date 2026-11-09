@@ -21,11 +21,19 @@ func WithMiddleware(middleware Middleware) Option {
 	}
 }
 
+// WithConfiguredProviders delegates saved-provider resolution to the supplied
+// resolver. The registry applies its middleware to each resolved provider.
+func WithConfiguredProviders(resolver alfred.ProviderResolver) Option {
+	return func(registry *Registry) {
+		registry.configured = resolver
+	}
+}
+
 // Registry resolves configured model providers.
 type Registry struct {
 	providers   map[alfred.ProviderID]alfred.ModelProvider
 	middlewares []Middleware
-	configured  *configuredProviders
+	configured  alfred.ProviderResolver
 }
 
 // NewRegistry creates a registry containing providers.
@@ -70,7 +78,7 @@ func (registry *Registry) ResolveProvider(
 
 	provider, ok := registry.providers[id]
 	if !ok && registry.configured != nil {
-		resolved, err := registry.configured.resolve(ctx, id)
+		resolved, err := registry.configured.ResolveProvider(ctx, id)
 		if err != nil {
 			return nil, errors.B.Op(op).Err(err).Build()
 		}

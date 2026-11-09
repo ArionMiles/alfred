@@ -22,6 +22,7 @@ import (
 // Model is Alfred's Bubble Tea application state.
 type Model struct {
 	ctx             context.Context
+	openURL         func(context.Context, string) error
 	clients         rpc.Clients
 	root            string
 	project         *alfredv1.Project
@@ -127,6 +128,7 @@ type sessionReconnectMsg struct {
 func NewModel(ctx context.Context, config Config, clients rpc.Clients, root string) Model {
 	return Model{
 		ctx:        ctx,
+		openURL:    openBrowserURL,
 		clients:    clients,
 		root:       root,
 		composer:   newComposer(commands),
@@ -210,6 +212,12 @@ func (model Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model.updateProviderFormLoaded(message)
 	case providerSavedMsg:
 		return model.updateProviderSaved(message)
+	case providerAuthorizationStartedMsg:
+		return model.updateProviderAuthorizationStarted(message)
+	case providerAuthorizationPollMsg:
+		return model.updateProviderAuthorizationPoll(message)
+	case providerAuthorizationCanceledMsg:
+		return model.updateProviderAuthorizationCanceled(message)
 	case tea.WindowSizeMsg:
 		return model.updateWindowSize(message)
 	case spinner.TickMsg:

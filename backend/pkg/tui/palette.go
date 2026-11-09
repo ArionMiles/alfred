@@ -6,11 +6,14 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	alfredv1 "github.com/ArionMiles/alfred/gen/alfred/v1"
 )
 
 const (
-	enterKey  = "enter"
-	escapeKey = "esc"
+	enterKey       = "enter"
+	escapeKey      = "esc"
+	closePanelHelp = "enter or esc close"
 )
 
 func newPickerList(title string, items []list.Item, width, height int) list.Model {
@@ -32,7 +35,16 @@ func (model Model) togglePalette() (tea.Model, tea.Cmd) {
 		if model.searchSetup != nil && model.searchSetup.saving {
 			return model, nil
 		}
-		if (model.providers != nil && model.providers.saving) || (model.models != nil && model.models.saving) {
+		if model.providers != nil && model.providers.authorization != nil &&
+			model.providers.authorization.GetState() == alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_PENDING {
+			if model.providers.canceling {
+				return model, nil
+			}
+			model.providers.canceling = true
+			return model, model.cancelProviderAuthorization()
+		}
+		if (model.providers != nil && (model.providers.saving || model.providers.canceling)) ||
+			(model.models != nil && model.models.saving) {
 			return model, nil
 		}
 		model.palette = nil
@@ -177,7 +189,7 @@ func (model Model) overlayPalette(content string) string {
 			controls = "Saving search settings…"
 		}
 		if model.searchSetup.saved {
-			controls = "enter or esc close"
+			controls = closePanelHelp
 		}
 	}
 	help := lipgloss.NewStyle().Width(model.palette.Width()).Render(controls)

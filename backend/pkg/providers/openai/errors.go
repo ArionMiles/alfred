@@ -3,7 +3,9 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"strings"
 
 	sdk "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/packages/ssestream"
@@ -21,6 +23,9 @@ func requestError(ctx context.Context, err error) error {
 	// secrets. Retain only classifications we control, not the raw error chain.
 	var apiError *sdk.Error
 	if errors.As(err, &apiError) {
+		if strings.HasPrefix(apiError.Code, "subscription_sharing_") || strings.HasPrefix(apiError.Code, "chatpass_v2_") {
+			return responseError(apiError.Code)
+		}
 		return statusError(apiError.StatusCode)
 	}
 	var streamError *ssestream.StreamError
@@ -68,13 +73,47 @@ func responseError(code string) error {
 	switch code {
 	case "rate_limit_exceeded", "insufficient_quota":
 		return statusError(http.StatusTooManyRequests)
+	case "subscription_sharing_usage_limit_exceeded":
+		return errors.B.Op(op).KindResourceExhausted().Retryable(true).
+			UserMsg("ChatGPT plan usage is limited. Check the app and plan limits at https://chatgpt.com/settings/usage before resuming.").Build()
 	case "invalid_api_key", "invalid_authentication":
 		return statusError(http.StatusUnauthorized)
+	case "subscription_sharing_invalid_user":
+		return errors.B.Op(op).KindUnauthenticated().Retryable(true).
+			UserMsg("OpenAI could not validate the ChatGPT account. Check the connection in Providers; reconnect if access was revoked.").Build()
 	case "server_error", "vector_store_timeout":
 		return statusError(http.StatusServiceUnavailable)
+	case "subscription_sharing_usage_unavailable", "subscription_sharing_user_unavailable":
+		return errors.B.Op(op).KindUnavailable().Retryable(true).
+			UserMsg("OpenAI could not check ChatGPT account availability. Wait and try again; your connection has been kept.").Build()
 	case "invalid_prompt", "invalid_request_error":
 		return statusError(http.StatusBadRequest)
+	case "subscription_sharing_unsupported_capability":
+		return errors.B.Op(op).KindInvalidArgument().
+			UserMsg("This request uses a capability unavailable through ChatGPT plan access. Change the request or model before trying again.").Build()
+	case "subscription_sharing_user_not_eligible":
+		return errors.B.Op(op).KindPermissionDenied().
+			UserMsg("ChatGPT plan usage is unavailable for this account or workspace policy. Check eligibility or configure an API key in Providers.").Build()
+	case "chatpass_v2_scope_not_authorized", "chatpass_v2_invalid_authorization_context":
+		return errors.B.Op(op).KindPermissionDenied().
+			UserMsg("The OpenAI grant does not authorize this operation. Check the selected account and ChatGPT plan permission in Providers.").Build()
+	case "subscription_sharing_route_not_supported":
+		return errors.B.Op(op).KindFailedPrecondition().
+			UserMsg("This OpenAI operation is not available through ChatGPT plan access.").Build()
 	default:
 		return errors.B.Op(op).KindBadGateway().UserMsg("OpenAI could not complete this response.").Build()
 	}
+}
+
+func subscriptionHTTPError(response *http.Response) error {
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&body)
+	if strings.HasPrefix(body.Error.Code, "subscription_sharing_") || strings.HasPrefix(body.Error.Code, "chatpass_v2_") {
+		return responseError(body.Error.Code)
+	}
+	return statusError(response.StatusCode)
 }

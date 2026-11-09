@@ -74,7 +74,7 @@ func TestCatalogRefreshRetainsUsableCacheOnFailure(t *testing.T) {
 	}{
 		{"unavailable", http.StatusServiceUnavailable, `upstream unavailable`},
 		{"malformed", http.StatusOK, `not json`},
-		{"missing_openai", http.StatusOK, `{"other":{"models":{}}}`},
+		{"empty", http.StatusOK, `{}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -103,6 +103,25 @@ func TestCatalogRefreshRetainsUsableCacheOnFailure(t *testing.T) {
 				t.Fatal("failed refresh replaced usable cache")
 			}
 		})
+	}
+}
+
+func TestCatalogSourceAcceptsCatalogWithoutOpenAI(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"other":{"models":{"other-model":{"name":"Other"}}}}`))
+	}))
+	t.Cleanup(server.Close)
+	config := DefaultCatalogConfig()
+	config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
+	source := NewCatalogSource(config, server.Client())
+	models, err := source.Models(t.Context(), "other")
+	if err != nil || len(models) != 1 || models[0].Ref.ModelID != "other-model" {
+		t.Fatalf("Models(other) = %#v, %v", models, err)
+	}
+	models, err = source.Models(t.Context(), "openai")
+	if err != nil || len(models) != 0 {
+		t.Fatalf("Models(openai) = %#v, %v", models, err)
 	}
 }
 

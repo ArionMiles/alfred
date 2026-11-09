@@ -53,6 +53,25 @@ A common API shape or shared credential storage does not give them the same
 lifecycle or ownership. Adding an inference adapter should not force it to adopt
 the default application's onboarding UI.
 
+Provider onboarding metadata belongs to the service. Clients select a declared
+provider and setup method, submit only the method's input values, and render the
+returned state. Provider definitions and implementations own configured-instance
+identity, display names, and defaults so different clients cannot create
+different meanings for the same setup method.
+
+Configured inference resolution belongs to the concrete provider, which owns
+its credential formats, supported settings, and authentication methods. The
+registry delegates through the provider resolver contract and applies shared
+middleware. Catalog loading and caching remain provider-neutral; a concrete
+resolver decides which published metadata it requires. Composition connects
+these boundaries without making the catalog depend on an installed adapter.
+
+OAuth callback presentation is a composition choice owned by the authorization
+service. SDK applications can supply static success HTML and their agent name;
+clients and file configuration do not interpret those choices. Custom HTML is
+served only after validated credentials and plan permission are saved, so
+presentation cannot establish authorization success or hide a declined grant.
+
 ## Durable history and mutable state have different jobs
 
 JSONL records ordered execution facts; SQLite owns mutable application state.
@@ -97,6 +116,16 @@ interpretation owned by the adapter. Tools and clients should not need to
 understand it. This preserves protocol information at the cost of storage
 compatibility obligations and limits on replay through a different protocol;
 it does not imply automatic cross-provider translation.
+
+Some providers can continue from an opaque response or conversation handle
+instead of receiving the complete history again. Adapters may use that facility
+to reduce latency and time to first output, but Alfred's durable history remains
+authoritative. A continuation handle is valid only for the provider capability
+and compatible history prefix, provider instance, model, and credential that
+produced it. Switching providers, changing an incompatible prefix, losing the
+remote state, or encountering an unsupported request mode falls back to normal
+history replay. Provider-managed retention is therefore an optimization, not a
+session-liveness dependency.
 
 ## Tool effects share an execution boundary
 

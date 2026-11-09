@@ -23,6 +23,27 @@ type CatalogConfig struct {
 	MaxAge    time.Duration
 }
 
+// CatalogSource loads current model metadata using the shared catalog cache.
+type CatalogSource struct {
+	config CatalogConfig
+	client *http.Client
+}
+
+// NewCatalogSource configures catalog loading independently of inference transport.
+func NewCatalogSource(config CatalogConfig, client *http.Client) *CatalogSource {
+	return &CatalogSource{config: config, client: client}
+}
+
+// Models loads the catalog and returns published metadata for the requested provider.
+func (source *CatalogSource) Models(ctx context.Context, provider alfred.ProviderType) ([]alfred.ModelInfo, error) {
+	const op = "Models"
+	catalog, err := LoadCatalog(ctx, source.config, source.client)
+	if err != nil {
+		return nil, errors.B.Op(op).Err(err).Build()
+	}
+	return catalog.Models(provider), nil
+}
+
 // DefaultCatalogConfig supplies the public source and a daily refresh interval.
 func DefaultCatalogConfig() CatalogConfig {
 	return CatalogConfig{URL: "https://models.dev/api.json", MaxAge: 24 * time.Hour}
@@ -129,9 +150,6 @@ func decodeCatalog(data []byte) (*Catalog, error) {
 	var entries map[alfred.ProviderType]catalogProvider
 	if err := json.Unmarshal(data, &entries); err != nil || len(entries) == 0 {
 		return nil, errors.B.Op(op).KindBadGateway().UserMsg("The model catalog could not be read.").Build()
-	}
-	if len(entries["openai"].Models) == 0 {
-		return nil, errors.B.Op(op).KindBadGateway().UserMsg("The model catalog has no OpenAI models.").Build()
 	}
 	return &Catalog{providers: entries}, nil
 }

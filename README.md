@@ -54,7 +54,8 @@ files and saved settings persist in a Docker volume. See
 
 In the TUI:
 
-1. Open `/providers`, choose OpenAI, choose API key, and save your key.
+1. Open `/providers` and choose OpenAI. Save an API key, or choose Continue with
+   ChatGPT when the daemon and browser run on the same host.
 2. Open `/models` and select a model.
 3. Send a message.
 

@@ -6,7 +6,7 @@ import "alfred/v1/setup.proto";
 
 option go_package = "github.com/ArionMiles/alfred/gen/alfred/v1;alfredv1";
 
-// ProviderSetupService exposes provider-defined onboarding forms and persistence.
+// ProviderSetupService exposes provider-defined onboarding methods and persistence.
 // Saving configuration does not verify authentication or activate inference.
 service ProviderSetupService {
   // ListProviderDefinitions returns setup choices in provider-type order.
@@ -15,13 +15,44 @@ service ProviderSetupService {
   rpc PrepareProviderSetup(PrepareProviderSetupRequest) returns (PrepareProviderSetupResponse);
   // SubmitProviderSetup validates and saves a complete form submission.
   rpc SubmitProviderSetup(SubmitProviderSetupRequest) returns (SubmitProviderSetupResponse);
+  // StartProviderAuthorization begins a browser-based provider setup flow.
+  rpc StartProviderAuthorization(StartProviderAuthorizationRequest) returns (StartProviderAuthorizationResponse);
+  // GetProviderAuthorization reports safe progress for a setup flow.
+  rpc GetProviderAuthorization(GetProviderAuthorizationRequest) returns (GetProviderAuthorizationResponse);
+  // CancelProviderAuthorization stops a pending setup flow.
+  rpc CancelProviderAuthorization(CancelProviderAuthorizationRequest) returns (CancelProviderAuthorizationResponse);
 }
 
-// ProviderSetupMethod declares an ordered form such as API-key authentication.
+enum ProviderSetupMethodKind {
+  PROVIDER_SETUP_METHOD_KIND_UNSPECIFIED = 0;
+  PROVIDER_SETUP_METHOD_KIND_FORM = 1;
+  PROVIDER_SETUP_METHOD_KIND_AUTHORIZATION = 2;
+}
+
+// ProviderSetupMethod declares an ordered form or interactive authorization flow.
 message ProviderSetupMethod {
   string id = 1;
   string name = 2;
   repeated SetupField fields = 3;
+  ProviderSetupMethodKind kind = 4;
+}
+
+enum ProviderAuthorizationState {
+  PROVIDER_AUTHORIZATION_STATE_UNSPECIFIED = 0;
+  PROVIDER_AUTHORIZATION_STATE_PENDING = 1;
+  PROVIDER_AUTHORIZATION_STATE_COMPLETED = 2;
+  PROVIDER_AUTHORIZATION_STATE_DENIED = 3;
+  PROVIDER_AUTHORIZATION_STATE_FAILED = 4;
+  PROVIDER_AUTHORIZATION_STATE_CANCELED = 5;
+}
+
+message ProviderAuthorization {
+  string id = 1;
+  ProviderAuthorizationState state = 2;
+  string authorization_url = 3;
+  string account_label = 4;
+  string message = 5;
+  ProviderInstance instance = 6;
 }
 
 // ProviderDefinition lists the setup methods offered by an implementation.
@@ -56,12 +87,10 @@ message ListProviderDefinitionsResponse {
   repeated ProviderDefinition definitions = 1;
 }
 
-// PrepareProviderSetupRequest selects a method and optionally an existing instance.
-// A supplied instance_id must exist and match the requested provider type.
+// PrepareProviderSetupRequest selects a method for the provider's configured instance.
 message PrepareProviderSetupRequest {
   string type = 1;
   string method_id = 2;
-  string instance_id = 3;
 }
 
 // PrepareProviderSetupResponse contains the selected form.
@@ -69,16 +98,14 @@ message PrepareProviderSetupResponse {
   ProviderSetupForm form = 1;
 }
 
-// SubmitProviderSetupRequest replaces one instance's selected-method settings.
+// SubmitProviderSetupRequest replaces the provider's selected-method settings.
+// The service owns the configured instance identity, display name, and defaults.
 // Values can contain secrets and must never be logged or added to session events.
 // Existing API-key connections require reentry of the key on submission.
 message SubmitProviderSetupRequest {
-  string instance_id = 1;
-  string type = 2;
-  string method_id = 3;
-  string name = 4;
-  bool enabled = 5;
-  map<string, string> values = 6;
+  string type = 1;
+  string method_id = 2;
+  map<string, string> values = 3;
 }
 
 // SubmitProviderSetupResponse contains either saved metadata or field errors.
@@ -86,4 +113,29 @@ message SubmitProviderSetupRequest {
 message SubmitProviderSetupResponse {
   ProviderInstance instance = 1;
   repeated SetupFieldError field_errors = 2;
+}
+
+message StartProviderAuthorizationRequest {
+  string type = 1;
+  string method_id = 2;
+}
+
+message StartProviderAuthorizationResponse {
+  ProviderAuthorization authorization = 1;
+}
+
+message GetProviderAuthorizationRequest {
+  string authorization_id = 1;
+}
+
+message GetProviderAuthorizationResponse {
+  ProviderAuthorization authorization = 1;
+}
+
+message CancelProviderAuthorizationRequest {
+  string authorization_id = 1;
+}
+
+message CancelProviderAuthorizationResponse {
+  ProviderAuthorization authorization = 1;
 }

@@ -8,13 +8,52 @@ type ProviderDefinition struct {
 	Methods []ProviderSetupMethod
 }
 
-// ProviderSetupMethod describes one form, such as API-key authentication or AWS
-// profile settings. Its ID is stable and does not depend on its display order.
+// ProviderSetupMethodKind identifies how a setup method is completed.
+type ProviderSetupMethodKind string
+
+const (
+	ProviderSetupMethodForm          ProviderSetupMethodKind = "form"
+	ProviderSetupMethodAuthorization ProviderSetupMethodKind = "authorization"
+)
+
+// ProviderSetupMethod describes one form or interactive authorization flow.
+// Its ID is stable and does not depend on its display order. InstanceName is
+// server-owned metadata for the saved connection and is not a client input.
 // Executing the method and validating connectivity belong to the service.
 type ProviderSetupMethod struct {
-	ID     string
-	Name   string
-	Fields []SetupField
+	ID           string
+	Name         string
+	InstanceName string
+	Kind         ProviderSetupMethodKind
+	Fields       []SetupField
+}
+
+type ProviderAuthorizationID string
+
+type ProviderAuthorizationState string
+
+const (
+	ProviderAuthorizationPending   ProviderAuthorizationState = "pending"
+	ProviderAuthorizationCompleted ProviderAuthorizationState = "completed"
+	ProviderAuthorizationDenied    ProviderAuthorizationState = "denied"
+	ProviderAuthorizationFailed    ProviderAuthorizationState = "failed"
+	ProviderAuthorizationCanceled  ProviderAuthorizationState = "canceled"
+)
+
+// ProviderAuthorizationRequest selects an interactive provider setup method.
+type ProviderAuthorizationRequest struct {
+	Type     ProviderType
+	MethodID string
+}
+
+// ProviderAuthorization reports safe progress for an interactive setup flow.
+type ProviderAuthorization struct {
+	ID               ProviderAuthorizationID
+	State            ProviderAuthorizationState
+	AuthorizationURL string
+	AccountLabel     string
+	Message          string
+	Instance         *ProviderInstance
 }
 
 // ProviderSetupForm combines a method definition with safe editable settings.
@@ -29,11 +68,8 @@ type ProviderSetupForm struct {
 // ProviderSetupSubmission contains form inputs for one configured instance.
 // Values may contain secrets and must not be logged or added to session events.
 type ProviderSetupSubmission struct {
-	ID       ProviderID
 	Type     ProviderType
 	MethodID string
-	Name     string
-	Enabled  bool
 	Values   map[string]string
 }
 

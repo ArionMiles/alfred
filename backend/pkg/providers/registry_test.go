@@ -53,3 +53,44 @@ func TestRegistryReportsMissingProvider(t *testing.T) {
 		t.Fatalf("errors.WhatKind() = %#v, want %#v", got, errors.NotFound)
 	}
 }
+
+func TestRegistryDelegatesAndDecoratesConfiguredProviders(t *testing.T) {
+	t.Parallel()
+	controller := gomock.NewController(t)
+	resolver := mocks.NewMockProviderResolver(controller)
+	resolved := mocks.NewMockModelProvider(controller)
+	decorated := mocks.NewMockModelProvider(controller)
+	resolver.EXPECT().ResolveProvider(gomock.Any(), alfred.ProviderID("custom-instance")).Return(resolved, nil)
+	registry, err := NewRegistry(nil,
+		WithConfiguredProviders(resolver),
+		WithMiddleware(func(provider alfred.ModelProvider) alfred.ModelProvider {
+			if provider != resolved {
+				t.Fatal("middleware did not receive the resolved provider")
+			}
+			return decorated
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := registry.ResolveProvider(t.Context(), "custom-instance")
+	if err != nil || provider != decorated {
+		t.Fatalf("ResolveProvider() = %v, %v", provider, err)
+	}
+}
+
+func TestRegistryPrefersRegisteredProviderOverConfiguredResolver(t *testing.T) {
+	t.Parallel()
+	controller := gomock.NewController(t)
+	resolver := mocks.NewMockProviderResolver(controller)
+	registered := mocks.NewMockModelProvider(controller)
+	registered.EXPECT().ID().Return(alfred.ProviderID("custom-instance"))
+	registry, err := NewRegistry([]alfred.ModelProvider{registered}, WithConfiguredProviders(resolver))
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := registry.ResolveProvider(t.Context(), "custom-instance")
+	if err != nil || provider != registered {
+		t.Fatalf("ResolveProvider() = %v, %v", provider, err)
+	}
+}

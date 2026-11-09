@@ -1,19 +1,29 @@
 package providers
 
-import "github.com/ArionMiles/alfred"
+import (
+	"github.com/ArionMiles/alfred"
+	"github.com/ArionMiles/alfred/pkg/providers/openai"
+)
+
+const apiKeyMethodID = "api-key"
 
 // SetupDefinitions returns independent metadata for planned built-in adapters.
-// Definitions describe forms only; they do not advertise runtime availability.
-// OAuth is added when a concrete authorization flow is implemented.
+// Definitions describe setup methods only; they do not advertise runtime availability.
 func SetupDefinitions() []alfred.ProviderDefinition {
 	return []alfred.ProviderDefinition{
-		{Type: "openai", Name: "OpenAI", Methods: []alfred.ProviderSetupMethod{apiKeyMethod()}},
+		{Type: "openai", Name: "OpenAI", Methods: []alfred.ProviderSetupMethod{
+			apiKeyMethod(),
+			{
+				ID: "chatgpt-subscription", Name: "Continue with ChatGPT",
+				InstanceName: openai.SubscriptionInstanceName, Kind: alfred.ProviderSetupMethodAuthorization,
+			},
+		}},
 		{Type: "deepseek", Name: "DeepSeek", Methods: []alfred.ProviderSetupMethod{apiKeyMethod()}},
 		{Type: "fireworks", Name: "Fireworks AI", Methods: []alfred.ProviderSetupMethod{apiKeyMethod()}},
 		{
 			Type: "aws-bedrock", Name: "Amazon Bedrock",
 			Methods: []alfred.ProviderSetupMethod{{
-				ID: "profile", Name: "AWS profile and region",
+				ID: "profile", Name: "AWS profile and region", Kind: alfred.ProviderSetupMethodForm,
 				Fields: []alfred.SetupField{
 					{
 						ID: "profile", Label: "AWS profile", Kind: alfred.SetupFieldText,
@@ -32,7 +42,7 @@ func SetupDefinitions() []alfred.ProviderDefinition {
 
 func apiKeyMethod() alfred.ProviderSetupMethod {
 	return alfred.ProviderSetupMethod{
-		ID: "api-key", Name: "API key",
+		ID: apiKeyMethodID, Name: "API key", Kind: alfred.ProviderSetupMethodForm,
 		Fields: []alfred.SetupField{
 			{ID: "api_key", Label: "API key", Kind: alfred.SetupFieldSecret, Required: true},
 			{

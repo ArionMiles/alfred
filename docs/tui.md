@@ -11,7 +11,8 @@ there. Files and Shell commands operate on the daemon's filesystem. See
 
 ## Connect and choose a model
 
-Open `/providers`, select OpenAI and its API-key method, then save your key.
+Open `/providers`, select OpenAI, then either save an API key or choose Continue
+with ChatGPT and finish signing in through the browser on the daemon's host.
 Open `/models` to select a model before sending your first message. The model
 selection is remembered across sessions and restarts. See
 [Model providers](providers.md) for setup, filtering, and selection details.

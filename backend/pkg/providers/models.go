@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"slices"
-	"sort"
 
 	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
@@ -50,19 +49,6 @@ func (service *ModelService) ListModels(ctx context.Context) ([]ModelChoice, err
 		}
 		choices = append(choices, models...)
 	}
-	sort.Slice(choices, func(i, j int) bool {
-		a, b := choices[i], choices[j]
-		if a.Model.Name != b.Model.Name {
-			return a.Model.Name < b.Model.Name
-		}
-		if a.ProviderName != b.ProviderName {
-			return a.ProviderName < b.ProviderName
-		}
-		if a.Model.Ref.ProviderID != b.Model.Ref.ProviderID {
-			return a.Model.Ref.ProviderID < b.Model.Ref.ProviderID
-		}
-		return a.Model.Ref.ModelID < b.Model.Ref.ModelID
-	})
 	return choices, nil
 }
 

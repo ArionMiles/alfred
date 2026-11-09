@@ -16,20 +16,90 @@ type providerSetupStore interface {
 	PutProviderInstance(context.Context, alfred.ProviderInstance) error
 }
 
-// ProviderSetupHandler exposes onboarding without exposing stored credentials.
-type ProviderSetupHandler struct {
-	setup     *providers.SetupService
-	submitter *providers.Submitter
-	store     providerSetupStore
+type providerAuthorizer interface {
+	Start(context.Context, alfred.ProviderAuthorizationRequest) (alfred.ProviderAuthorization, error)
+	Get(context.Context, alfred.ProviderAuthorizationID) (alfred.ProviderAuthorization, error)
+	Cancel(context.Context, alfred.ProviderAuthorizationID) (alfred.ProviderAuthorization, error)
 }
 
-// NewProviderSetupHandler composes provider forms and their persistence workflow.
+// ProviderSetupHandler exposes onboarding without exposing stored credentials.
+type ProviderSetupHandler struct {
+	setup      *providers.SetupService
+	submitter  *providers.Submitter
+	store      providerSetupStore
+	authorizer providerAuthorizer
+}
+
+// NewProviderSetupHandler composes provider forms and interactive authorization.
 func NewProviderSetupHandler(
 	setup *providers.SetupService,
 	submitter *providers.Submitter,
 	store providerSetupStore,
+	authorizer providerAuthorizer,
 ) *ProviderSetupHandler {
-	return &ProviderSetupHandler{setup: setup, submitter: submitter, store: store}
+	return &ProviderSetupHandler{setup: setup, submitter: submitter, store: store, authorizer: authorizer}
+}
+
+// StartProviderAuthorization begins an interactive provider setup method.
+func (handler *ProviderSetupHandler) StartProviderAuthorization(
+	ctx context.Context,
+	request *alfredv1.StartProviderAuthorizationRequest,
+) (*alfredv1.StartProviderAuthorizationResponse, error) {
+	const op = "StartProviderAuthorization"
+
+	if request == nil {
+		return nil, connectError(errors.B.Op(op).KindInvalidArgument().Text("request is nil").Build())
+	}
+	if handler.authorizer == nil {
+		return nil, connectError(errors.B.Op(op).KindFailedPrecondition().Text("provider authorization is unavailable").Build())
+	}
+	authorization, err := handler.authorizer.Start(ctx, alfred.ProviderAuthorizationRequest{
+		Type: alfred.ProviderType(request.GetType()), MethodID: request.GetMethodId(),
+	})
+	if err != nil {
+		return nil, connectError(err)
+	}
+	return &alfredv1.StartProviderAuthorizationResponse{Authorization: encodeProviderAuthorization(authorization)}, nil
+}
+
+// GetProviderAuthorization reports progress without exposing credentials.
+func (handler *ProviderSetupHandler) GetProviderAuthorization(
+	ctx context.Context,
+	request *alfredv1.GetProviderAuthorizationRequest,
+) (*alfredv1.GetProviderAuthorizationResponse, error) {
+	const op = "GetProviderAuthorization"
+
+	if request == nil {
+		return nil, connectError(errors.B.Op(op).KindInvalidArgument().Text("request is nil").Build())
+	}
+	if handler.authorizer == nil {
+		return nil, connectError(errors.B.Op(op).KindFailedPrecondition().Text("provider authorization is unavailable").Build())
+	}
+	authorization, err := handler.authorizer.Get(ctx, alfred.ProviderAuthorizationID(request.GetAuthorizationId()))
+	if err != nil {
+		return nil, connectError(err)
+	}
+	return &alfredv1.GetProviderAuthorizationResponse{Authorization: encodeProviderAuthorization(authorization)}, nil
+}
+
+// CancelProviderAuthorization stops a pending setup flow.
+func (handler *ProviderSetupHandler) CancelProviderAuthorization(
+	ctx context.Context,
+	request *alfredv1.CancelProviderAuthorizationRequest,
+) (*alfredv1.CancelProviderAuthorizationResponse, error) {
+	const op = "CancelProviderAuthorization"
+
+	if request == nil {
+		return nil, connectError(errors.B.Op(op).KindInvalidArgument().Text("request is nil").Build())
+	}
+	if handler.authorizer == nil {
+		return nil, connectError(errors.B.Op(op).KindFailedPrecondition().Text("provider authorization is unavailable").Build())
+	}
+	authorization, err := handler.authorizer.Cancel(ctx, alfred.ProviderAuthorizationID(request.GetAuthorizationId()))
+	if err != nil {
+		return nil, connectError(err)
+	}
+	return &alfredv1.CancelProviderAuthorizationResponse{Authorization: encodeProviderAuthorization(authorization)}, nil
 }
 
 // ListProviderDefinitions returns the registered onboarding choices.
@@ -63,13 +133,12 @@ func (handler *ProviderSetupHandler) PrepareProviderSetup(
 	if request == nil {
 		return nil, connectError(errors.B.Op(op).KindInvalidArgument().Text("request is nil").Build())
 	}
+	instance, err := handler.store.GetProviderInstance(ctx, alfred.ProviderID(request.GetType()))
 	var existing *alfred.ProviderInstance
-	if request.GetInstanceId() != "" {
-		instance, err := handler.store.GetProviderInstance(ctx, alfred.ProviderID(request.GetInstanceId()))
-		if err != nil {
-			return nil, connectError(err)
-		}
+	if err == nil {
 		existing = &instance
+	} else if errors.WhatKind(err) != errors.NotFound {
+		return nil, connectError(err)
 	}
 	form, err := handler.setup.PrepareForm(alfred.ProviderType(request.GetType()), request.GetMethodId(), existing)
 	if err != nil {
@@ -92,8 +161,7 @@ func (handler *ProviderSetupHandler) SubmitProviderSetup(
 		return nil, connectError(errors.B.Op(op).KindInvalidArgument().Text("request is nil").Build())
 	}
 	result, err := handler.submitter.Submit(ctx, handler.store, alfred.ProviderSetupSubmission{
-		ID: alfred.ProviderID(request.GetInstanceId()), Type: alfred.ProviderType(request.GetType()),
-		MethodID: request.GetMethodId(), Name: request.GetName(), Enabled: request.GetEnabled(), Values: request.GetValues(),
+		Type: alfred.ProviderType(request.GetType()), MethodID: request.GetMethodId(), Values: request.GetValues(),
 	})
 	if err != nil {
 		return nil, connectError(err)
@@ -112,11 +180,53 @@ func (handler *ProviderSetupHandler) SubmitProviderSetup(
 }
 
 func encodeProviderSetupMethod(method alfred.ProviderSetupMethod) *alfredv1.ProviderSetupMethod {
-	encoded := &alfredv1.ProviderSetupMethod{Id: method.ID, Name: method.Name}
+	encoded := &alfredv1.ProviderSetupMethod{Id: method.ID, Name: method.Name, Kind: encodeProviderSetupMethodKind(method.Kind)}
 	for _, field := range method.Fields {
 		encoded.Fields = append(encoded.Fields, encodeSetupField(field))
 	}
 	return encoded
+}
+
+func encodeProviderSetupMethodKind(kind alfred.ProviderSetupMethodKind) alfredv1.ProviderSetupMethodKind {
+	switch kind {
+	case alfred.ProviderSetupMethodForm:
+		return alfredv1.ProviderSetupMethodKind_PROVIDER_SETUP_METHOD_KIND_FORM
+	case alfred.ProviderSetupMethodAuthorization:
+		return alfredv1.ProviderSetupMethodKind_PROVIDER_SETUP_METHOD_KIND_AUTHORIZATION
+	default:
+		return alfredv1.ProviderSetupMethodKind_PROVIDER_SETUP_METHOD_KIND_UNSPECIFIED
+	}
+}
+
+func encodeProviderAuthorization(value alfred.ProviderAuthorization) *alfredv1.ProviderAuthorization {
+	encoded := &alfredv1.ProviderAuthorization{
+		Id: string(value.ID), State: encodeProviderAuthorizationState(value.State),
+		AuthorizationUrl: value.AuthorizationURL, AccountLabel: value.AccountLabel, Message: value.Message,
+	}
+	if value.Instance != nil {
+		encoded.Instance = &alfredv1.ProviderInstance{
+			Id: string(value.Instance.ID), Type: string(value.Instance.Type), Name: value.Instance.Name,
+			Enabled: value.Instance.Enabled, Settings: maps.Clone(value.Instance.Settings),
+		}
+	}
+	return encoded
+}
+
+func encodeProviderAuthorizationState(state alfred.ProviderAuthorizationState) alfredv1.ProviderAuthorizationState {
+	switch state {
+	case alfred.ProviderAuthorizationPending:
+		return alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_PENDING
+	case alfred.ProviderAuthorizationCompleted:
+		return alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_COMPLETED
+	case alfred.ProviderAuthorizationDenied:
+		return alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_DENIED
+	case alfred.ProviderAuthorizationFailed:
+		return alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_FAILED
+	case alfred.ProviderAuthorizationCanceled:
+		return alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_CANCELED
+	default:
+		return alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_UNSPECIFIED
+	}
 }
 
 var _ alfredv1connect.ProviderSetupServiceHandler = (*ProviderSetupHandler)(nil)

@@ -1,4 +1,4 @@
-package providers_test
+package openai_test
 
 import (
 	"encoding/json"
@@ -10,18 +10,23 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"go.uber.org/mock/gomock"
 
 	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/mocks"
+	"github.com/ArionMiles/alfred/pkg/clock"
+	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/providers"
+	provideropenai "github.com/ArionMiles/alfred/pkg/providers/openai"
+	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
 func TestConfiguredProviderUsesSavedSetupAndPicksUpChanges(t *testing.T) {
 	t.Parallel()
-	store, submitter := newSubmitter(t)
+	store, submitter := newResolverSetup(t)
 	type received struct {
 		path          string
 		authorization string
@@ -57,25 +62,30 @@ func TestConfiguredProviderUsesSavedSetupAndPicksUpChanges(t *testing.T) {
 		}
 	}
 	registry, err := providers.NewRegistry(nil,
-		providers.WithConfiguredProviders(store, store, catalog, server.Client(), server.Client()),
+		providers.WithConfiguredProviders(provideropenai.NewResolver(
+			store, store, nil, providers.NewCatalogSource(catalog, server.Client()), server.Client(),
+		)),
 		providers.WithMiddleware(layer("outer")), providers.WithMiddleware(layer("inner")),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	submission := apiKeySubmission()
+	submission := alfred.ProviderSetupSubmission{
+		Type: "openai", MethodID: "api-key", Values: map[string]string{},
+	}
+	providerID := alfred.ProviderID(submission.Type)
 	for index, version := range []string{"v1", "v2"} {
 		key := "test-secret-" + version
 		submission.Values["api_key"], submission.Values["base_url"] = key, server.URL+"/"+version
 		if _, err := submitter.Submit(t.Context(), store, submission); err != nil {
 			t.Fatal(err)
 		}
-		provider, err := registry.ResolveProvider(t.Context(), submission.ID)
+		provider, err := registry.ResolveProvider(t.Context(), providerID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		models, err := provider.Models(t.Context())
-		if err != nil || len(models) != 1 || models[0].Ref.ProviderID != submission.ID || models[0].Name != "Test model" || !models[0].Capabilities.Reasoning {
+		if err != nil || len(models) != 1 || models[0].Ref.ProviderID != providerID || models[0].Name != "Test model" || !models[0].Capabilities.Reasoning {
 			t.Fatalf("models=%#v error=%v", models, err)
 		}
 		model, err := provider.ResolveModel(t.Context(), "test-model")
@@ -131,7 +141,7 @@ func TestConfiguredProviderRejectsUnusableSetupBeforeNetworkAccess(t *testing.T)
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			store, _ := newSubmitter(t)
+			store, _ := newResolverSetup(t)
 			instance := test.instance
 			if test.credential != "" {
 				instance = alfred.ProviderInstance{ID: "personal", Type: "openai", Enabled: true, CredentialRef: "credential"}
@@ -148,7 +158,9 @@ func TestConfiguredProviderRejectsUnusableSetupBeforeNetworkAccess(t *testing.T)
 			t.Cleanup(server.Close)
 			catalog := providers.DefaultCatalogConfig()
 			catalog.URL, catalog.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
-			registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(store, store, catalog, server.Client(), server.Client()))
+			registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(provideropenai.NewResolver(
+				store, store, nil, providers.NewCatalogSource(catalog, server.Client()), server.Client(),
+			)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -168,7 +180,7 @@ func TestConfiguredProviderRejectsUnusableSetupBeforeNetworkAccess(t *testing.T)
 
 func TestConfiguredProviderUsesSuppliedCredentialBackend(t *testing.T) {
 	t.Parallel()
-	store, _ := newSubmitter(t)
+	store, _ := newResolverSetup(t)
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/catalog" {
 			_, _ = fmt.Fprint(writer, `{"openai":{"models":{"test-model":{"name":"Test model"}}}}`)
@@ -189,7 +201,9 @@ func TestConfiguredProviderUsesSuppliedCredentialBackend(t *testing.T) {
 	credentials.EXPECT().GetCredential(gomock.Any(), instance.CredentialRef).Return([]byte(`{"version":1,"provider":"openai","method":"api-key","fields":{"api_key":"external-test-key"}}`), nil)
 	catalog := providers.DefaultCatalogConfig()
 	catalog.URL, catalog.CacheFile = server.URL+"/catalog", filepath.Join(t.TempDir(), "models.dev.json")
-	registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(store, credentials, catalog, server.Client(), server.Client()))
+	registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(provideropenai.NewResolver(
+		store, credentials, nil, providers.NewCatalogSource(catalog, server.Client()), server.Client(),
+	)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,4 +216,100 @@ func TestConfiguredProviderUsesSuppliedCredentialBackend(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+func TestConfiguredProviderResolvesChatGPTSubscription(t *testing.T) {
+	t.Parallel()
+	store, _ := newResolverSetup(t)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/catalog" {
+			t.Errorf("unexpected request path %q", request.URL.Path)
+		}
+		_, _ = fmt.Fprint(writer, `{"openai":{"models":{"test-model":{"name":"Test model"}}}}`)
+	}))
+	t.Cleanup(server.Close)
+	instance := alfred.ProviderInstance{
+		ID: "openai", Type: "openai", Name: "OpenAI (ChatGPT plan)", Enabled: true,
+		CredentialRef: "subscription-ref", Settings: map[string]string{},
+	}
+	if err := store.PutProviderInstance(t.Context(), instance); err != nil {
+		t.Fatal(err)
+	}
+	credential := map[string]any{
+		"version": 1, "provider": "openai", "method": "chatgpt-subscription",
+		"issuer": "https://auth.openai.com", "subject": "account-subject", "client_id": "issued-client",
+		"access_token": "access", "refresh_token": "refresh", "scopes": []string{"api.connectors.read"},
+		"expires_at_unix": time.Now().Add(time.Hour).Unix(),
+	}
+	data, err := json.Marshal(credential)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutCredential(t.Context(), instance.CredentialRef, data); err != nil {
+		t.Fatal(err)
+	}
+	catalog := providers.DefaultCatalogConfig()
+	catalog.URL, catalog.CacheFile = server.URL+"/catalog", filepath.Join(t.TempDir(), "models.dev.json")
+	registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(provideropenai.NewResolver(
+		store, store,
+		provideropenai.NewSubscriptionCredentials(store, provideropenai.DefaultAuthorizationConfig(), server.Client(), clock.System{}),
+		providers.NewCatalogSource(catalog, server.Client()), server.Client(),
+	)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := registry.ResolveProvider(t.Context(), instance.ID)
+	if err != nil || provider == nil {
+		t.Fatalf("ResolveProvider() = %v, %v", provider, err)
+	}
+}
+
+func TestOpenAIResolverRequiresOpenAIModelMetadata(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{"api-key", "chatgpt-subscription"} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			store, _ := newResolverSetup(t)
+			instance := alfred.ProviderInstance{ID: "openai", Type: "openai", Enabled: true, CredentialRef: "credential"}
+			if err := store.PutProviderInstance(t.Context(), instance); err != nil {
+				t.Fatal(err)
+			}
+			credential, err := json.Marshal(map[string]any{
+				"version": 1, "provider": "openai", "method": method,
+				"fields": map[string]string{"api_key": "test-key"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := store.PutCredential(t.Context(), instance.CredentialRef, credential); err != nil {
+				t.Fatal(err)
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprint(writer, `{"other":{"models":{"other-model":{"name":"Other"}}}}`)
+			}))
+			t.Cleanup(server.Close)
+			catalog := providers.DefaultCatalogConfig()
+			catalog.URL, catalog.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
+			resolver := provideropenai.NewResolver(
+				store, store,
+				provideropenai.NewSubscriptionCredentials(store, provideropenai.DefaultAuthorizationConfig(), server.Client(), clock.System{}),
+				providers.NewCatalogSource(catalog, server.Client()), server.Client(),
+			)
+			provider, err := resolver.ResolveProvider(t.Context(), instance.ID)
+			if provider != nil || errors.WhatKind(err) != errors.BadGateway ||
+				errors.UserMsg(err) != "The model catalog has no OpenAI models." {
+				t.Fatalf("ResolveProvider() = %v, %v", provider, err)
+			}
+		})
+	}
+}
+
+func newResolverSetup(t *testing.T) (*sqlite.Store, *providers.Submitter) {
+	t.Helper()
+	store := newAuthorizationStore(t)
+	setup, err := providers.NewSetupService(providers.SetupDefinitions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store, providers.NewSubmitter(setup, store, identity.Generator[alfred.CredentialRef]{})
 }

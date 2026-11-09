@@ -8,14 +8,14 @@ import (
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
-// SetupService exposes provider-defined forms independently of their clients.
+// SetupService exposes provider-defined onboarding methods independently of their clients.
 // Metadata is separate from Registry, which resolves executable inference clients.
 type SetupService struct {
 	definitions map[alfred.ProviderType]alfred.ProviderDefinition
 }
 
 // NewSetupService registers trusted backend definitions, copying their slices
-// so preparing or editing one form does not change subsequent requests.
+// so preparing or editing one method does not change subsequent requests.
 func NewSetupService(definitions []alfred.ProviderDefinition) (*SetupService, error) {
 	const op = "NewSetupService"
 
@@ -24,7 +24,16 @@ func NewSetupService(definitions []alfred.ProviderDefinition) (*SetupService, er
 		if _, exists := registered[definition.Type]; exists {
 			return nil, errors.B.Op(op).KindConflict().Text("provider definition is registered twice").Build()
 		}
-		registered[definition.Type] = cloneDefinition(definition)
+		definition = cloneDefinition(definition)
+		for index := range definition.Methods {
+			if definition.Methods[index].Kind == "" {
+				definition.Methods[index].Kind = alfred.ProviderSetupMethodForm
+			}
+			if definition.Methods[index].InstanceName == "" {
+				definition.Methods[index].InstanceName = definition.Name
+			}
+		}
+		registered[definition.Type] = definition
 	}
 	return &SetupService{definitions: registered}, nil
 }
@@ -57,8 +66,12 @@ func (service *SetupService) PrepareForm(
 	if index < 0 {
 		return alfred.ProviderSetupForm{}, errors.B.Op(op).KindNotFound().Text("provider setup method does not exist").Build()
 	}
+	if definition.Methods[index].Kind != alfred.ProviderSetupMethodForm {
+		return alfred.ProviderSetupForm{}, errors.B.Op(op).KindFailedPrecondition().Text("provider setup method is not a form").Build()
+	}
 	form := alfred.ProviderSetupForm{
-		Type: providerType, Method: cloneDefinition(definition).Methods[index], Values: make(map[string]string),
+		Type: providerType, InstanceID: alfred.ProviderID(providerType),
+		Method: cloneDefinition(definition).Methods[index], Values: make(map[string]string),
 	}
 	if instance == nil {
 		return form, nil
@@ -66,7 +79,9 @@ func (service *SetupService) PrepareForm(
 	if instance.Type != providerType {
 		return alfred.ProviderSetupForm{}, errors.B.Op(op).KindInvalidArgument().Text("provider type does not match the instance").Build()
 	}
-	form.InstanceID = instance.ID
+	if instance.ID != form.InstanceID {
+		return alfred.ProviderSetupForm{}, errors.B.Op(op).KindInvalidArgument().Text("provider instance does not match the configured singleton").Build()
+	}
 	for _, field := range form.Method.Fields {
 		if field.Kind != alfred.SetupFieldSecret {
 			if value, exists := instance.Settings[field.ID]; exists {

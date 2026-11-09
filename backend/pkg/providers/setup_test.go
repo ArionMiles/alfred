@@ -14,7 +14,7 @@ func TestPrepareFormPreservesSettingsAndOmitsSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	instance := alfred.ProviderInstance{
-		ID: "work", Type: "openai", CredentialRef: "stored-key",
+		ID: "openai", Type: "openai", CredentialRef: "stored-key",
 		Settings: map[string]string{
 			"base_url": "https://example.com/v1", "api_key": "must-not-leak", "other": "unused",
 		},
@@ -64,5 +64,10 @@ func TestPrepareFormRejectsUnknownMethodAndMismatchedInstance(t *testing.T) {
 		ID: "work", Type: "aws-bedrock",
 	}); errors.WhatKind(err) != errors.InvalidArgument {
 		t.Fatalf("mismatched instance error = %v", err)
+	}
+	if _, err := service.PrepareForm("openai", "api-key", &alfred.ProviderInstance{
+		ID: "work", Type: "openai",
+	}); errors.WhatKind(err) != errors.InvalidArgument {
+		t.Fatalf("non-singleton instance error = %v", err)
 	}
 }

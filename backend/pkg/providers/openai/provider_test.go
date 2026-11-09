@@ -181,6 +181,31 @@ func TestUnsuccessfulStreamsDoNotEmitCompletedOutput(t *testing.T) {
 	}
 }
 
+func TestSubscriptionResponseErrorsAreClassified(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		code      string
+		kind      errors.Kind
+		retryable bool
+	}{
+		{"subscription_sharing_usage_limit_exceeded", errors.ResourceExhausted, true},
+		{"subscription_sharing_usage_unavailable", errors.Unavailable, true},
+		{"subscription_sharing_user_unavailable", errors.Unavailable, true},
+		{"subscription_sharing_invalid_user", errors.Unauthenticated, true},
+		{"subscription_sharing_user_not_eligible", errors.PermissionDenied, false},
+		{"chatpass_v2_scope_not_authorized", errors.PermissionDenied, false},
+		{"subscription_sharing_unsupported_capability", errors.InvalidArgument, false},
+		{"subscription_sharing_route_not_supported", errors.FailedPrecondition, false},
+	} {
+		t.Run(test.code, func(t *testing.T) {
+			err := responseError(test.code)
+			if errors.WhatKind(err) != test.kind || errors.IsRetryable(err) != test.retryable {
+				t.Fatalf("responseError(%q) = %v", test.code, err)
+			}
+		})
+	}
+}
+
 func TestStreamCancellationAndConsumerStopCloseConnection(t *testing.T) {
 	t.Parallel()
 	for _, stopEarly := range []bool{false, true} {

@@ -54,10 +54,11 @@ func (submitter *Submitter) Submit(
 ) (alfred.ProviderSetupResult, error) {
 	const op = "Submit"
 
-	if strings.TrimSpace(string(request.ID)) == "" {
-		return alfred.ProviderSetupResult{}, errors.B.Op(op).KindInvalidArgument().Text("provider ID is required").Build()
+	if strings.TrimSpace(string(request.Type)) == "" {
+		return alfred.ProviderSetupResult{}, errors.B.Op(op).KindInvalidArgument().Text("provider type is required").Build()
 	}
-	instance, err := target.GetProviderInstance(ctx, request.ID)
+	instanceID := alfred.ProviderID(request.Type)
+	instance, err := target.GetProviderInstance(ctx, instanceID)
 	if err != nil && errors.WhatKind(err) != errors.NotFound {
 		return alfred.ProviderSetupResult{}, errors.B.Op(op).Text("load setup target").Err(err).Build()
 	}
@@ -65,7 +66,7 @@ func (submitter *Submitter) Submit(
 	if err == nil {
 		existing = &instance
 	} else {
-		instance = alfred.ProviderInstance{ID: request.ID, Type: request.Type}
+		instance = alfred.ProviderInstance{ID: instanceID, Type: request.Type, Enabled: true}
 	}
 	form, err := submitter.setup.PrepareForm(request.Type, request.MethodID, existing)
 	if err != nil {
@@ -74,11 +75,7 @@ func (submitter *Submitter) Submit(
 	if problems := alfred.ValidateSetupFields(form.Method.Fields, request.Values); len(problems) != 0 {
 		return alfred.ProviderSetupResult{FieldErrors: problems}, nil
 	}
-	instance.Name = request.Name
-	if instance.Name == "" {
-		instance.Name = string(instance.ID)
-	}
-	instance.Enabled = request.Enabled
+	instance.Name = form.Method.InstanceName
 	settings, secrets := setupSettings(instance.Settings, form.Method, request.Values)
 	instance.Settings = settings
 	ref, err := submitter.saveCredential(ctx, request, instance.CredentialRef, secrets)

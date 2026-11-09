@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -176,6 +177,118 @@ func TestProviderFormSelectUsesDeclaredValuesAndNavigates(t *testing.T) {
 	}
 }
 
+func TestProviderAuthorizationOpensBrowserAndCompletes(t *testing.T) {
+	t.Parallel()
+	model, _ := newProviderTestModel(t)
+	var openedURL string
+	model.openURL = func(_ context.Context, address string) error {
+		openedURL = address
+		return nil
+	}
+	opened, load := model.openProviders()
+	loaded, _ := opened.(Model).Update(load())
+	model = loaded.(Model)
+	for index, item := range model.palette.Items() {
+		if item.(providerChoice).definition.GetType() == "openai" {
+			model.palette.Select(index)
+		}
+	}
+	selected, _ := model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	model = selected.(Model)
+	model.palette.Select(1)
+	starting, start := model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	started, _ := starting.(Model).Update(start())
+	model = started.(Model)
+	if openedURL != "https://auth.example.test/authorize" || model.providers.authorization.GetId() != "authorization-1" ||
+		!strings.Contains(model.View().Content, openedURL) {
+		t.Fatalf("authorization was not opened and displayed: %q", model.View().Content)
+	}
+	completed, _ := model.Update(providerAuthorizationPollMsg{
+		setup: model.providers,
+		authorization: &alfredv1.ProviderAuthorization{
+			Id: "authorization-1", State: alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_COMPLETED,
+			Message: "OpenAI account connected.", AccountLabel: "person@example.test",
+		},
+	})
+	model = completed.(Model)
+	if !model.providers.saved || !strings.Contains(model.View().Content, "person@example.test") {
+		t.Fatalf("completed authorization was not shown: %q", model.View().Content)
+	}
+	closed, _ := model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if closed.(Model).providers != nil {
+		t.Fatal("completed authorization did not close")
+	}
+}
+
+type providerAuthorizerStub struct{}
+
+func TestProviderAuthorizationPollRecoversAfterDaemonRestart(t *testing.T) {
+	t.Parallel()
+	model, _ := newProviderTestModel(t)
+	palette := newPickerList("Providers", nil, 80, 24)
+	model.palette = &palette
+	model.providers = &providerSetup{
+		definition: &alfredv1.ProviderDefinition{Name: "Example"},
+		method:     &alfredv1.ProviderSetupMethod{Name: "Sign in"},
+		authorization: &alfredv1.ProviderAuthorization{
+			Id: "old-attempt", State: alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_PENDING,
+		},
+	}
+	updated, retry := model.updateProviderAuthorizationPoll(providerAuthorizationPollMsg{
+		setup: model.providers, err: connect.NewError(connect.CodeUnavailable, "daemon is restarting"),
+	})
+	model = updated.(Model)
+	if retry == nil || model.providers.authorization.GetId() != "old-attempt" {
+		t.Fatal("temporary polling failure lost the attempt")
+	}
+	if !strings.Contains(model.View().Content, "reopen Alfred to reconnect") {
+		t.Fatal("polling failure did not explain reconnecting to a restarted daemon")
+	}
+	dismissed, _ := model.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if dismissed.(Model).providers != nil {
+		t.Fatal("unreachable daemon prevented dismissing authorization")
+	}
+	updated, retry = model.updateProviderAuthorizationPoll(providerAuthorizationPollMsg{
+		setup: model.providers, err: connect.NewError(connect.CodeNotFound, "Authorization is no longer available. Reopen Providers and start again."),
+	})
+	model = updated.(Model)
+	if retry != nil || !strings.Contains(model.View().Content, "Reopen Providers") ||
+		model.providers.authorization.GetState() != alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_FAILED {
+		t.Fatal("lost attempt was not shown as a recoverable, dismissible failure")
+	}
+	closed, _ := model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if closed.(Model).providers != nil {
+		t.Fatal("lost authorization could not be dismissed")
+	}
+}
+
+func (*providerAuthorizerStub) Start(
+	context.Context,
+	alfred.ProviderAuthorizationRequest,
+) (alfred.ProviderAuthorization, error) {
+	return alfred.ProviderAuthorization{
+		ID: "authorization-1", State: alfred.ProviderAuthorizationPending,
+		AuthorizationURL: "https://auth.example.test/authorize",
+	}, nil
+}
+
+func (*providerAuthorizerStub) Get(
+	context.Context,
+	alfred.ProviderAuthorizationID,
+) (alfred.ProviderAuthorization, error) {
+	return alfred.ProviderAuthorization{
+		ID: "authorization-1", State: alfred.ProviderAuthorizationCompleted,
+		AccountLabel: "person@example.test", Message: "OpenAI account connected.",
+	}, nil
+}
+
+func (*providerAuthorizerStub) Cancel(
+	context.Context,
+	alfred.ProviderAuthorizationID,
+) (alfred.ProviderAuthorization, error) {
+	return alfred.ProviderAuthorization{ID: "authorization-1", State: alfred.ProviderAuthorizationCanceled}, nil
+}
+
 func newProviderTestModel(t *testing.T) (Model, *sqlite.Store) {
 	t.Helper()
 	store, err := sqlite.Open(t.Context(), sqlite.Config{Path: filepath.Join(t.TempDir(), "alfred.db"), BusyTimeout: time.Second})
@@ -193,7 +306,7 @@ func newProviderTestModel(t *testing.T) (Model, *sqlite.Store) {
 	}
 	submitter := providers.NewSubmitter(setup, store, identity.Generator[alfred.CredentialRef]{})
 	server := connect.NewServer()
-	alfredv1connect.RegisterProviderSetupServiceHandler(server, rpc.NewProviderSetupHandler(setup, submitter, store))
+	alfredv1connect.RegisterProviderSetupServiceHandler(server, rpc.NewProviderSetupHandler(setup, submitter, store, &providerAuthorizerStub{}))
 	model := readyModel(t)
 	model.clients = rpc.NewClients(connect.NewClient(connectinprocess.New(server)))
 	resized, _ := model.Update(tea.WindowSizeMsg{Width: 90, Height: 24})

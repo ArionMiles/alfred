@@ -212,7 +212,7 @@ func (*ListModelsRequest) Descriptor() ([]byte, []int) {
 	return file_alfred_v1_model_service_proto_rawDescGZIP(), []int{2}
 }
 
-// ListModelsResponse contains choices ordered by model and provider name.
+// ListModelsResponse preserves each configured provider's returned model order.
 type ListModelsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Models        []*ModelInfo           `protobuf:"bytes,1,rep,name=models,proto3" json:"models,omitempty"`

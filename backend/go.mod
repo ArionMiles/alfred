@@ -19,15 +19,19 @@ require (
 	charm.land/glamour/v2 v2.0.1
 	charm.land/lipgloss/v2 v2.0.6
 	connectrpc.com/connect/v2 v2.0.2
+	github.com/coreos/go-oidc/v3 v3.21.0
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gofrs/flock v0.13.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
+	github.com/google/uuid v1.6.0
 	github.com/knadh/koanf/parsers/toml/v2 v2.2.2
 	github.com/knadh/koanf/providers/rawbytes v1.0.1
 	github.com/knadh/koanf/v2 v2.4.1
 	github.com/openai/openai-go/v3 v3.96.0
 	go.uber.org/mock v0.6.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
+	golang.org/x/oauth2 v0.36.0
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.61.0
 )
@@ -144,7 +148,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v88 v88.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gordonklaus/ineffassign v0.2.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/gostaticanalysis/analysisutil v0.7.1 // indirect

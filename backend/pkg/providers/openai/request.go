@@ -38,6 +38,7 @@ func (provider *Provider) buildRequest(ctx context.Context, request alfred.Model
 		prepared.params.Reasoning = shared.ReasoningParam{Summary: "auto"}
 	}
 	names := make(map[alfred.ToolID]string, len(request.Tools))
+	var subscriptionTools []responses.NamespaceToolToolUnionParam
 	for _, tool := range request.Tools {
 		if _, exists := prepared.tools[tool.Name]; exists || tool.Name == "" {
 			return preparedRequest{}, errors.B.Op(op).KindInvalidArgument().Text("tool names must be nonempty and unique").Build()
@@ -46,10 +47,23 @@ func (provider *Provider) buildRequest(ctx context.Context, request alfred.Model
 		if err := json.Unmarshal(tool.InputSchema, &schema); err != nil || schema == nil {
 			return preparedRequest{}, errors.B.Op(op).KindInvalidArgument().Text("tool input schema must be a JSON object").Build()
 		}
-		prepared.params.Tools = append(prepared.params.Tools, responses.ToolUnionParam{OfFunction: &responses.FunctionToolParam{
-			Name: tool.Name, Description: param.NewOpt(tool.Description), Parameters: schema, Strict: param.NewOpt(false),
-		}})
+		if provider.subscription != nil {
+			subscriptionTools = append(subscriptionTools, responses.NamespaceToolToolUnionParam{
+				OfFunction: &responses.NamespaceToolToolFunctionParam{
+					Name: tool.Name, Description: param.NewOpt(tool.Description), Parameters: schema, Strict: param.NewOpt(false),
+				},
+			})
+		} else {
+			prepared.params.Tools = append(prepared.params.Tools, responses.ToolUnionParam{OfFunction: &responses.FunctionToolParam{
+				Name: tool.Name, Description: param.NewOpt(tool.Description), Parameters: schema, Strict: param.NewOpt(false),
+			}})
+		}
 		prepared.tools[tool.Name], names[tool.ID] = tool.ID, tool.Name
+	}
+	if len(subscriptionTools) != 0 {
+		prepared.params.Tools = append(prepared.params.Tools, responses.ToolUnionParam{OfNamespace: &responses.NamespaceToolParam{
+			Name: "alfred", Description: "Tools available from Alfred", Tools: subscriptionTools,
+		}})
 	}
 	input := make(responses.ResponseInputParam, 0, len(request.Input))
 	for _, item := range request.Input {

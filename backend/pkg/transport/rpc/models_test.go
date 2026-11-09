@@ -22,6 +22,7 @@ import (
 	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/invocation"
 	"github.com/ArionMiles/alfred/pkg/providers"
+	"github.com/ArionMiles/alfred/pkg/providers/openai"
 	"github.com/ArionMiles/alfred/pkg/storage/jsonl"
 	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
 )
@@ -38,11 +39,11 @@ func TestModelRPCListsValidatesAndPreservesSelectedPreference(t *testing.T) {
 		t.Fatalf("choices=%v error=%v", choices, err)
 	}
 	first := choices.GetModels()[0]
-	if first.GetName() != "Alpha" || first.GetProviderName() != "Personal OpenAI" || first.GetRef().GetProviderId() != "personal" ||
+	if first.GetName() != "Alpha" || first.GetProviderName() != "OpenAI" || first.GetRef().GetProviderId() != "openai" ||
 		first.GetCapabilities().GetContextWindow() != 128000 || !first.GetCapabilities().GetReasoning() || first.GetCapabilities().GetInputModalities()[0] != alfredv1.ContentKind_CONTENT_KIND_TEXT {
 		t.Fatalf("model metadata=%v", first)
 	}
-	instance, err := store.GetProviderInstance(t.Context(), "personal")
+	instance, err := store.GetProviderInstance(t.Context(), "openai")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,8 +59,8 @@ func TestModelRPCListsValidatesAndPreservesSelectedPreference(t *testing.T) {
 		code connect.Code
 	}{
 		{nil, connect.CodeInvalidArgument},
-		{&alfredv1.ModelRef{ProviderId: "personal", ModelId: "missing"}, connect.CodeNotFound},
-		{&alfredv1.ModelRef{ProviderId: "personal", ModelId: "image"}, connect.CodeUnimplemented},
+		{&alfredv1.ModelRef{ProviderId: "openai", ModelId: "missing"}, connect.CodeNotFound},
+		{&alfredv1.ModelRef{ProviderId: "openai", ModelId: "image"}, connect.CodeUnimplemented},
 		{&alfredv1.ModelRef{ProviderId: "disabled", ModelId: "a"}, connect.CodeFailedPrecondition},
 		{&alfredv1.ModelRef{ProviderId: "deepseek", ModelId: "a"}, connect.CodeUnimplemented},
 	} {
@@ -77,7 +78,7 @@ func TestNewRunsSnapshotSelectionWithoutChangingEarlierRuns(t *testing.T) {
 	t.Parallel()
 	clients, store := newModelTestClients(t)
 	for _, id := range []string{"a", "z"} {
-		_, err := clients.Models.SelectModel(t.Context(), &alfredv1.SelectModelRequest{Model: &alfredv1.ModelRef{ProviderId: "personal", ModelId: id}})
+		_, err := clients.Models.SelectModel(t.Context(), &alfredv1.SelectModelRequest{Model: &alfredv1.ModelRef{ProviderId: "openai", ModelId: id}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -99,7 +100,7 @@ func TestNewRunsSnapshotSelectionWithoutChangingEarlierRuns(t *testing.T) {
 		model := runs.Runs[0].DefaultModel
 		foundA = foundA || model.ModelID == "a"
 		foundZ = foundZ || model.ModelID == "z"
-		if model.ProviderID != "personal" {
+		if model.ProviderID != "openai" {
 			t.Fatalf("run provider=%q", model.ProviderID)
 		}
 	}
@@ -152,7 +153,9 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
 		t.Fatal(err)
 	}
 	submitter := providers.NewSubmitter(setup, store, identity.Generator[alfred.CredentialRef]{})
-	if _, err := submitter.Submit(t.Context(), store, alfred.ProviderSetupSubmission{ID: "personal", Type: "openai", Name: "Personal OpenAI", Enabled: true, MethodID: "api-key", Values: map[string]string{"api_key": "test-model-secret"}}); err != nil {
+	if _, err := submitter.Submit(t.Context(), store, alfred.ProviderSetupSubmission{
+		Type: "openai", MethodID: "api-key", Values: map[string]string{"api_key": "test-model-secret"},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	for _, instance := range []alfred.ProviderInstance{{ID: "disabled", Type: "openai"}, {ID: "deepseek", Type: "deepseek", Enabled: true}} {
@@ -162,7 +165,9 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
 	}
 	catalog := providers.DefaultCatalogConfig()
 	catalog.URL, catalog.CacheFile = source.URL+"/catalog", filepath.Join(t.TempDir(), "models.dev.json")
-	registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(store, store, catalog, source.Client(), source.Client()))
+	registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(openai.NewResolver(
+		store, store, nil, providers.NewCatalogSource(catalog, source.Client()), source.Client(),
+	)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +183,7 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
 	server := httptest.NewServer(NewServer(Handlers{
 		Models: NewModelHandler(modelService), Invocation: NewInvocationHandler(invocations),
 		Daemon: alfredv1connect.UnimplementedDaemonServiceHandler{}, Project: alfredv1connect.UnimplementedProjectServiceHandler{},
-		Session: alfredv1connect.UnimplementedSessionServiceHandler{}, Run: alfredv1connect.UnimplementedRunServiceHandler{}, ProviderSetup: NewProviderSetupHandler(setup, submitter, store),
+		Session: alfredv1connect.UnimplementedSessionServiceHandler{}, Run: alfredv1connect.UnimplementedRunServiceHandler{}, ProviderSetup: NewProviderSetupHandler(setup, submitter, store, nil),
 	}))
 	t.Cleanup(server.Close)
 	return NewClients(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))), store

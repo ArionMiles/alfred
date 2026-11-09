@@ -33,6 +33,15 @@ const (
 	// ProviderSetupServiceSubmitProviderSetupProcedure is the procedure name of the
 	// ProviderSetupService's SubmitProviderSetup RPC.
 	ProviderSetupServiceSubmitProviderSetupProcedure = "/alfred.v1.ProviderSetupService/SubmitProviderSetup"
+	// ProviderSetupServiceStartProviderAuthorizationProcedure is the procedure name of the
+	// ProviderSetupService's StartProviderAuthorization RPC.
+	ProviderSetupServiceStartProviderAuthorizationProcedure = "/alfred.v1.ProviderSetupService/StartProviderAuthorization"
+	// ProviderSetupServiceGetProviderAuthorizationProcedure is the procedure name of the
+	// ProviderSetupService's GetProviderAuthorization RPC.
+	ProviderSetupServiceGetProviderAuthorizationProcedure = "/alfred.v1.ProviderSetupService/GetProviderAuthorization"
+	// ProviderSetupServiceCancelProviderAuthorizationProcedure is the procedure name of the
+	// ProviderSetupService's CancelProviderAuthorization RPC.
+	ProviderSetupServiceCancelProviderAuthorizationProcedure = "/alfred.v1.ProviderSetupService/CancelProviderAuthorization"
 )
 
 var (
@@ -57,6 +66,27 @@ var (
 			Procedure:  ProviderSetupServiceSubmitProviderSetupProcedure,
 		}
 	})
+	providerSetupServiceStartProviderAuthorizationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_alfred_v1_provider_setup_service_proto.Services().ByName("ProviderSetupService").Methods().ByName("StartProviderAuthorization"),
+			Procedure:  ProviderSetupServiceStartProviderAuthorizationProcedure,
+		}
+	})
+	providerSetupServiceGetProviderAuthorizationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_alfred_v1_provider_setup_service_proto.Services().ByName("ProviderSetupService").Methods().ByName("GetProviderAuthorization"),
+			Procedure:  ProviderSetupServiceGetProviderAuthorizationProcedure,
+		}
+	})
+	providerSetupServiceCancelProviderAuthorizationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_alfred_v1_provider_setup_service_proto.Services().ByName("ProviderSetupService").Methods().ByName("CancelProviderAuthorization"),
+			Procedure:  ProviderSetupServiceCancelProviderAuthorizationProcedure,
+		}
+	})
 )
 
 // ProviderSetupServiceClient is a client for the alfred.v1.ProviderSetupService service.
@@ -67,6 +97,12 @@ type ProviderSetupServiceClient interface {
 	PrepareProviderSetup(context.Context, *v1.PrepareProviderSetupRequest) (*v1.PrepareProviderSetupResponse, error)
 	// SubmitProviderSetup validates and saves a complete form submission.
 	SubmitProviderSetup(context.Context, *v1.SubmitProviderSetupRequest) (*v1.SubmitProviderSetupResponse, error)
+	// StartProviderAuthorization begins a browser-based provider setup flow.
+	StartProviderAuthorization(context.Context, *v1.StartProviderAuthorizationRequest) (*v1.StartProviderAuthorizationResponse, error)
+	// GetProviderAuthorization reports safe progress for a setup flow.
+	GetProviderAuthorization(context.Context, *v1.GetProviderAuthorizationRequest) (*v1.GetProviderAuthorizationResponse, error)
+	// CancelProviderAuthorization stops a pending setup flow.
+	CancelProviderAuthorization(context.Context, *v1.CancelProviderAuthorizationRequest) (*v1.CancelProviderAuthorizationResponse, error)
 }
 
 // NewProviderSetupServiceClient constructs a client for the alfred.v1.ProviderSetupService service.
@@ -83,6 +119,12 @@ type ProviderSetupServiceHandler interface {
 	PrepareProviderSetup(context.Context, *v1.PrepareProviderSetupRequest) (*v1.PrepareProviderSetupResponse, error)
 	// SubmitProviderSetup validates and saves a complete form submission.
 	SubmitProviderSetup(context.Context, *v1.SubmitProviderSetupRequest) (*v1.SubmitProviderSetupResponse, error)
+	// StartProviderAuthorization begins a browser-based provider setup flow.
+	StartProviderAuthorization(context.Context, *v1.StartProviderAuthorizationRequest) (*v1.StartProviderAuthorizationResponse, error)
+	// GetProviderAuthorization reports safe progress for a setup flow.
+	GetProviderAuthorization(context.Context, *v1.GetProviderAuthorizationRequest) (*v1.GetProviderAuthorizationResponse, error)
+	// CancelProviderAuthorization stops a pending setup flow.
+	CancelProviderAuthorization(context.Context, *v1.CancelProviderAuthorizationRequest) (*v1.CancelProviderAuthorizationResponse, error)
 }
 
 // RegisterProviderSetupServiceHandler registers svc as the alfred.v1.ProviderSetupService
@@ -93,6 +135,9 @@ func RegisterProviderSetupServiceHandler(server *connect.Server, svc ProviderSet
 		connect.Method{Spec: providerSetupServiceListProviderDefinitionsSpec(), Handler: adapter.listProviderDefinitions},
 		connect.Method{Spec: providerSetupServicePrepareProviderSetupSpec(), Handler: adapter.prepareProviderSetup},
 		connect.Method{Spec: providerSetupServiceSubmitProviderSetupSpec(), Handler: adapter.submitProviderSetup},
+		connect.Method{Spec: providerSetupServiceStartProviderAuthorizationSpec(), Handler: adapter.startProviderAuthorization},
+		connect.Method{Spec: providerSetupServiceGetProviderAuthorizationSpec(), Handler: adapter.getProviderAuthorization},
+		connect.Method{Spec: providerSetupServiceCancelProviderAuthorizationSpec(), Handler: adapter.cancelProviderAuthorization},
 	)
 }
 
@@ -109,6 +154,18 @@ func (UnimplementedProviderSetupServiceHandler) PrepareProviderSetup(context.Con
 
 func (UnimplementedProviderSetupServiceHandler) SubmitProviderSetup(context.Context, *v1.SubmitProviderSetupRequest) (*v1.SubmitProviderSetupResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "alfred.v1.ProviderSetupService.SubmitProviderSetup is not implemented")
+}
+
+func (UnimplementedProviderSetupServiceHandler) StartProviderAuthorization(context.Context, *v1.StartProviderAuthorizationRequest) (*v1.StartProviderAuthorizationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "alfred.v1.ProviderSetupService.StartProviderAuthorization is not implemented")
+}
+
+func (UnimplementedProviderSetupServiceHandler) GetProviderAuthorization(context.Context, *v1.GetProviderAuthorizationRequest) (*v1.GetProviderAuthorizationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "alfred.v1.ProviderSetupService.GetProviderAuthorization is not implemented")
+}
+
+func (UnimplementedProviderSetupServiceHandler) CancelProviderAuthorization(context.Context, *v1.CancelProviderAuthorizationRequest) (*v1.CancelProviderAuthorizationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "alfred.v1.ProviderSetupService.CancelProviderAuthorization is not implemented")
 }
 
 type providerSetupServiceClient struct {
@@ -134,6 +191,30 @@ func (c *providerSetupServiceClient) PrepareProviderSetup(ctx context.Context, r
 func (c *providerSetupServiceClient) SubmitProviderSetup(ctx context.Context, req *v1.SubmitProviderSetupRequest) (*v1.SubmitProviderSetupResponse, error) {
 	var res v1.SubmitProviderSetupResponse
 	if err := c.client.CallUnary(ctx, providerSetupServiceSubmitProviderSetupSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerSetupServiceClient) StartProviderAuthorization(ctx context.Context, req *v1.StartProviderAuthorizationRequest) (*v1.StartProviderAuthorizationResponse, error) {
+	var res v1.StartProviderAuthorizationResponse
+	if err := c.client.CallUnary(ctx, providerSetupServiceStartProviderAuthorizationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerSetupServiceClient) GetProviderAuthorization(ctx context.Context, req *v1.GetProviderAuthorizationRequest) (*v1.GetProviderAuthorizationResponse, error) {
+	var res v1.GetProviderAuthorizationResponse
+	if err := c.client.CallUnary(ctx, providerSetupServiceGetProviderAuthorizationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerSetupServiceClient) CancelProviderAuthorization(ctx context.Context, req *v1.CancelProviderAuthorizationRequest) (*v1.CancelProviderAuthorizationResponse, error) {
+	var res v1.CancelProviderAuthorizationResponse
+	if err := c.client.CallUnary(ctx, providerSetupServiceCancelProviderAuthorizationSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -171,6 +252,42 @@ func (h providerSetupServiceHandler) submitProviderSetup(ctx context.Context, _ 
 		return err
 	}
 	res, err := h.svc.SubmitProviderSetup(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerSetupServiceHandler) startProviderAuthorization(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartProviderAuthorizationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartProviderAuthorization(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerSetupServiceHandler) getProviderAuthorization(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetProviderAuthorizationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetProviderAuthorization(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerSetupServiceHandler) cancelProviderAuthorization(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CancelProviderAuthorizationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CancelProviderAuthorization(ctx, &req)
 	if err != nil {
 		return err
 	}
