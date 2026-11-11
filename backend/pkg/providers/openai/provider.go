@@ -155,15 +155,12 @@ func (provider *Provider) Stream(ctx context.Context, request alfred.ModelReques
 		var nextReasoningIndex uint32
 		for stream.Next() {
 			event := stream.Current()
+			var delta alfred.ModelEventPayload
 			switch event.Type {
 			case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
-				if !yield(alfred.ModelEvent{CallID: request.ID, Payload: reasoningDelta(event, reasoningIndices, &nextReasoningIndex)}, nil) {
-					return
-				}
+				delta = reasoningDelta(event, reasoningIndices, &nextReasoningIndex)
 			case "response.output_text.delta":
-				if !yield(alfred.ModelEvent{CallID: request.ID, Payload: textDelta(event, indices, &nextIndex)}, nil) {
-					return
-				}
+				delta = textDelta(event, indices, &nextIndex)
 			case "response.completed":
 				yieldResponse(event.Response, request, prepared.tools, yield)
 				return
@@ -175,6 +172,11 @@ func (provider *Provider) Stream(ctx context.Context, request alfred.ModelReques
 				return
 			case "error":
 				yield(alfred.ModelEvent{}, responseError(event.Code))
+				return
+			default:
+				continue
+			}
+			if !yield(alfred.ModelEvent{CallID: request.ID, Payload: delta}, nil) {
 				return
 			}
 		}

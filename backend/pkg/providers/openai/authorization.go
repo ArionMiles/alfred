@@ -383,14 +383,16 @@ func (service *AuthorizationService) handleCallback(
 		return
 	}
 	query := request.URL.Query()
-	if query.Get("error") != "" {
-		state := alfred.ProviderAuthorizationFailed
+	switch query.Get("error") {
+	case "":
+	case "access_denied":
+		message := "OpenAI authorization was denied."
+		service.finish(id, alfred.ProviderAuthorizationDenied, message, "", nil)
+		service.authorizationPage(writer, false, message)
+		return
+	default:
 		message := "OpenAI authorization failed."
-		if query.Get("error") == "access_denied" {
-			state = alfred.ProviderAuthorizationDenied
-			message = "OpenAI authorization was denied."
-		}
-		service.finish(id, state, message, "", nil)
+		service.fail(id, message)
 		service.authorizationPage(writer, false, message)
 		return
 	}
@@ -580,6 +582,7 @@ func (service *AuthorizationService) save(
 ) error {
 	const op = "save"
 
+	// #nosec G117 -- Tokens are serialized only for the credential store.
 	data, err := json.Marshal(record)
 	if err != nil {
 		return errors.B.Op(op).Text("encode OpenAI credential").Err(err).Build()

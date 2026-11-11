@@ -110,64 +110,62 @@ func (model Model) updateProviderDefinitions(message providerDefinitionsMsg) (te
 func (model Model) updateProviderKey(message tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	setup := model.providers
 	enter := message.Code == tea.KeyEnter && message.Mod == 0
-	if setup.saving || setup.canceling {
+	pending := setup.authorization != nil && setup.authorization.GetState() == alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_PENDING
+	switch {
+	case setup.saving || setup.canceling:
 		return model, nil
-	}
-	if setup.authorization != nil {
-		if setup.authorization.GetState() == alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_PENDING {
-			if message.String() == escapeKey {
-				if setup.err != nil {
-					model.providers = nil
-					model.palette = nil
-					return model, model.focusInput()
-				}
-				setup.canceling = true
-				return model, model.cancelProviderAuthorization()
-			}
+	case pending:
+		if message.String() != escapeKey {
 			return model, nil
 		}
+		if setup.err == nil {
+			setup.canceling = true
+			return model, model.cancelProviderAuthorization()
+		}
+		model.providers = nil
+		model.palette = nil
+		return model, model.focusInput()
+	case setup.authorization != nil:
 		if message.String() == escapeKey || enter {
 			model.providers = nil
 			model.palette = nil
 			return model, model.focusInput()
 		}
 		return model, nil
-	}
-	if message.String() == escapeKey || (setup.saved && enter) {
+	case message.String() == escapeKey || (setup.saved && enter):
 		model.providers = nil
 		model.palette = nil
 		return model, model.focusInput()
-	}
-	if setup.loading != "" || setup.saved {
+	case setup.loading != "" || setup.saved:
 		return model, nil
-	}
-	if setup.form != nil {
+	case setup.form != nil:
 		return model.updateProviderFormKey(message)
 	}
-	if enter {
-		switch selected := model.palette.SelectedItem().(type) {
-		case providerChoice:
-			setup.definition = selected.definition
-			setup.err = nil
-			items := make([]list.Item, len(selected.definition.GetMethods()))
-			for index, method := range selected.definition.GetMethods() {
-				items[index] = providerMethodChoice{method: method}
-			}
-			width, height := model.paletteSize()
-			palette := newPickerList(selected.Title(), items, width, height)
-			model.palette = &palette
-			return model, nil
-		case providerMethodChoice:
-			if selected.method.GetKind() == alfredv1.ProviderSetupMethodKind_PROVIDER_SETUP_METHOD_KIND_AUTHORIZATION {
-				setup.loading = "Starting browser authorization…"
-				setup.method = selected.method
-				setup.err = nil
-				return model, model.startProviderAuthorization(selected.method.GetId())
-			}
-			setup.loading = "Loading setup form…"
-			setup.err = nil
-			return model, model.prepareProviderForm(selected.method.GetId())
+	if !enter {
+		return model.updatePalette(message)
+	}
+	switch selected := model.palette.SelectedItem().(type) {
+	case providerChoice:
+		setup.definition = selected.definition
+		setup.err = nil
+		items := make([]list.Item, len(selected.definition.GetMethods()))
+		for index, method := range selected.definition.GetMethods() {
+			items[index] = providerMethodChoice{method: method}
 		}
+		width, height := model.paletteSize()
+		palette := newPickerList(selected.Title(), items, width, height)
+		model.palette = &palette
+		return model, nil
+	case providerMethodChoice:
+		if selected.method.GetKind() == alfredv1.ProviderSetupMethodKind_PROVIDER_SETUP_METHOD_KIND_AUTHORIZATION {
+			setup.loading = "Starting browser authorization…"
+			setup.method = selected.method
+			setup.err = nil
+			return model, model.startProviderAuthorization(selected.method.GetId())
+		}
+		setup.loading = "Loading setup form…"
+		setup.err = nil
+		return model, model.prepareProviderForm(selected.method.GetId())
 	}
 	return model.updatePalette(message)
 }
@@ -337,54 +335,56 @@ func (model Model) updateProviderSaved(message providerSavedMsg) (tea.Model, tea
 
 func (model Model) providerView() string {
 	setup := model.providers
-	switch {
-	case setup.loading != "":
+	if setup.loading != "" {
 		return "Providers\n\n" + setup.loading
-	case setup.authorization != nil:
-		authorization := setup.authorization
-		body := setup.definition.GetName() + " · " + setup.method.GetName() + "\n\n"
-		switch authorization.GetState() {
-		case alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_PENDING:
-			body += "Finish signing in through your browser.\n\n" + authorization.GetAuthorizationUrl()
-			if setup.browserErr != nil {
-				body += "\n\nThe browser could not be opened automatically; open the URL above."
-			}
-			if setup.canceling {
-				body += "\n\nCanceling authorization…"
-			}
-		case alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_COMPLETED:
-			body += authorization.GetMessage()
-			if authorization.GetAccountLabel() != "" {
-				body += "\n" + authorization.GetAccountLabel()
-			}
-		default:
-			body += authorization.GetMessage()
-		}
-		if setup.err != nil {
-			body += "\n\n" + userErrorMessage(setup.err)
-			if authorization.GetState() == alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_PENDING {
-				body += "\nClose and reopen Alfred to reconnect. The browser authorization may still finish."
-			}
-		}
-		return body
-	case setup.saved:
-		return setup.definition.GetName() + "\n\nSettings saved.\nAccess has not been verified."
-	case setup.form != nil:
-		body := setup.definition.GetName() + " · " + setup.method.GetName() + "\n\n" + setup.form.view()
-		if setup.saving {
-			return body + "\nSaving settings…"
-		}
-		if setup.err != nil {
-			return body + "\nCould not save settings: " + userErrorMessage(setup.err)
-		}
-		return body
-	case setup.err != nil:
-		return fmt.Sprintf("Providers\n\nCould not load setup: %s\nDismiss and reopen to retry.", userErrorMessage(setup.err))
-	case len(model.palette.Items()) == 0:
-		return "Providers\n\nNo setup methods available."
-	default:
-		return model.palette.View()
 	}
+	if setup.authorization == nil {
+		switch {
+		case setup.saved:
+			return setup.definition.GetName() + "\n\nSettings saved.\nAccess has not been verified."
+		case setup.form != nil:
+			body := setup.definition.GetName() + " · " + setup.method.GetName() + "\n\n" + setup.form.view()
+			if setup.saving {
+				return body + "\nSaving settings…"
+			}
+			if setup.err != nil {
+				return body + "\nCould not save settings: " + userErrorMessage(setup.err)
+			}
+			return body
+		case setup.err != nil:
+			return fmt.Sprintf("Providers\n\nCould not load setup: %s\nDismiss and reopen to retry.", userErrorMessage(setup.err))
+		case len(model.palette.Items()) == 0:
+			return "Providers\n\nNo setup methods available."
+		default:
+			return model.palette.View()
+		}
+	}
+	authorization := setup.authorization
+	body := setup.definition.GetName() + " · " + setup.method.GetName() + "\n\n"
+	switch authorization.GetState() {
+	case alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_PENDING:
+		body += "Finish signing in through your browser.\n\n" + authorization.GetAuthorizationUrl()
+		if setup.browserErr != nil {
+			body += "\n\nThe browser could not be opened automatically; open the URL above."
+		}
+		if setup.canceling {
+			body += "\n\nCanceling authorization…"
+		}
+	case alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_COMPLETED:
+		body += authorization.GetMessage()
+		if authorization.GetAccountLabel() != "" {
+			body += "\n" + authorization.GetAccountLabel()
+		}
+	default:
+		body += authorization.GetMessage()
+	}
+	if setup.err != nil {
+		body += "\n\n" + userErrorMessage(setup.err)
+		if authorization.GetState() == alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_PENDING {
+			body += "\nClose and reopen Alfred to reconnect. The browser authorization may still finish."
+		}
+	}
+	return body
 }
 
 func (model Model) providerHelp() string {

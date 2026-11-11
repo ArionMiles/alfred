@@ -643,7 +643,7 @@ func getAuthorizationURL(t *testing.T, address string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	return http.DefaultClient.Do(request) //nolint:gosec // The test follows the loopback URL produced by the service.
+	return http.DefaultClient.Do(request)
 }
 
 func newAuthorizationService(t *testing.T, fixture *oauthFixture, store *sqlite.Store, options ...openai.AuthorizationOption) *openai.AuthorizationService {

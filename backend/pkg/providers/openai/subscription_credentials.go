@@ -80,6 +80,7 @@ func (credentials *SubscriptionCredentials) AccessToken(
 		if errors.WhatKind(err) == errors.Unauthenticated {
 			record.AccessToken = ""
 			record.RefreshToken = ""
+			// #nosec G117 -- The credential store must persist the cleared tokens.
 			data, encodeErr := json.Marshal(record)
 			if encodeErr == nil {
 				encodeErr = credentials.credentials.PutCredential(context.WithoutCancel(ctx), ref, data)
@@ -90,6 +91,7 @@ func (credentials *SubscriptionCredentials) AccessToken(
 		}
 		return "", errors.B.Op(op).Err(err).Build()
 	}
+	// #nosec G117 -- Rotated tokens are serialized only for the credential store.
 	data, err := json.Marshal(replacement)
 	if err != nil {
 		return "", errors.B.Op(op).Text("encode refreshed OpenAI credential").Err(err).Build()

@@ -195,8 +195,9 @@ enable = ['gci', 'gofumpt']
 [formatters.settings.gci]
 sections = ['standard', 'default', 'prefix(github.com/ArionMiles)']
 custom-order = true
-[formatters.settings.gofumpt]
-extra-rules = true
+[formatters.settings.gofumpt.extra]
+group-params = true
+clothe-returns = true
 [formatters.exclusions]
 generated = 'lax'
 paths = ['third_party$', 'builtin$', 'examples$']
