@@ -12,6 +12,7 @@ package mocks
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	alfred "github.com/ArionMiles/alfred"
 	gomock "go.uber.org/mock/gomock"
@@ -42,18 +43,18 @@ func (m *MockProjectResolver) EXPECT() *MockProjectResolverMockRecorder {
 }
 
 // ResolveProject mocks base method.
-func (m *MockProjectResolver) ResolveProject(arg0 context.Context, arg1 string) (alfred.Project, error) {
+func (m *MockProjectResolver) ResolveProject(arg0 context.Context, arg1 string, arg2 time.Time) (alfred.Project, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResolveProject", arg0, arg1)
+	ret := m.ctrl.Call(m, "ResolveProject", arg0, arg1, arg2)
 	ret0, _ := ret[0].(alfred.Project)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ResolveProject indicates an expected call of ResolveProject.
-func (mr *MockProjectResolverMockRecorder) ResolveProject(arg0, arg1 any) *MockProjectResolverResolveProjectCall {
+func (mr *MockProjectResolverMockRecorder) ResolveProject(arg0, arg1, arg2 any) *MockProjectResolverResolveProjectCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveProject", reflect.TypeOf((*MockProjectResolver)(nil).ResolveProject), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveProject", reflect.TypeOf((*MockProjectResolver)(nil).ResolveProject), arg0, arg1, arg2)
 	return &MockProjectResolverResolveProjectCall{Call: call}
 }
 
@@ -69,13 +70,13 @@ func (c *MockProjectResolverResolveProjectCall) Return(arg0 alfred.Project, arg1
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockProjectResolverResolveProjectCall) Do(f func(context.Context, string) (alfred.Project, error)) *MockProjectResolverResolveProjectCall {
+func (c *MockProjectResolverResolveProjectCall) Do(f func(context.Context, string, time.Time) (alfred.Project, error)) *MockProjectResolverResolveProjectCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockProjectResolverResolveProjectCall) DoAndReturn(f func(context.Context, string) (alfred.Project, error)) *MockProjectResolverResolveProjectCall {
+func (c *MockProjectResolverResolveProjectCall) DoAndReturn(f func(context.Context, string, time.Time) (alfred.Project, error)) *MockProjectResolverResolveProjectCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -229,18 +230,18 @@ func (m *MockInvocationService) EXPECT() *MockInvocationServiceMockRecorder {
 }
 
 // Invoke mocks base method.
-func (m *MockInvocationService) Invoke(arg0 context.Context, arg1 alfred.InvocationRequest) (alfred.Run, error) {
+func (m *MockInvocationService) Invoke(arg0 context.Context, arg1 alfred.InvocationRequest, arg2 time.Time) (alfred.Run, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Invoke", arg0, arg1)
+	ret := m.ctrl.Call(m, "Invoke", arg0, arg1, arg2)
 	ret0, _ := ret[0].(alfred.Run)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Invoke indicates an expected call of Invoke.
-func (mr *MockInvocationServiceMockRecorder) Invoke(arg0, arg1 any) *MockInvocationServiceInvokeCall {
+func (mr *MockInvocationServiceMockRecorder) Invoke(arg0, arg1, arg2 any) *MockInvocationServiceInvokeCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Invoke", reflect.TypeOf((*MockInvocationService)(nil).Invoke), arg0, arg1)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Invoke", reflect.TypeOf((*MockInvocationService)(nil).Invoke), arg0, arg1, arg2)
 	return &MockInvocationServiceInvokeCall{Call: call}
 }
 
@@ -256,13 +257,13 @@ func (c *MockInvocationServiceInvokeCall) Return(arg0 alfred.Run, arg1 error) *M
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockInvocationServiceInvokeCall) Do(f func(context.Context, alfred.InvocationRequest) (alfred.Run, error)) *MockInvocationServiceInvokeCall {
+func (c *MockInvocationServiceInvokeCall) Do(f func(context.Context, alfred.InvocationRequest, time.Time) (alfred.Run, error)) *MockInvocationServiceInvokeCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockInvocationServiceInvokeCall) DoAndReturn(f func(context.Context, alfred.InvocationRequest) (alfred.Run, error)) *MockInvocationServiceInvokeCall {
+func (c *MockInvocationServiceInvokeCall) DoAndReturn(f func(context.Context, alfred.InvocationRequest, time.Time) (alfred.Run, error)) *MockInvocationServiceInvokeCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

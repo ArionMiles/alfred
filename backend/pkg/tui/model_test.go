@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"connectrpc.com/connect/v2"
@@ -29,7 +30,7 @@ func TestModelResolvesProjectThroughRPC(t *testing.T) {
 		SkillTrust: alfred.ProjectSkillTrustUnknown,
 	}
 	resolver := mocks.NewMockProjectResolver(controller)
-	resolver.EXPECT().ResolveProject(gomock.Any(), project.Root).Return(project, nil)
+	resolver.EXPECT().ResolveProject(gomock.Any(), project.Root, gomock.AssignableToTypeOf(time.Time{})).Return(project, nil)
 	inspector := mocks.NewMockProjectSkillInspector(controller)
 	inspector.EXPECT().InspectProjectSkills(gomock.Any(), project.ID).Return(
 		alfred.ProjectSkillTrustState{ProjectID: project.ID, Trust: project.SkillTrust}, nil,
@@ -68,7 +69,7 @@ func TestModelPersistsProjectSkillTrustFromGate(t *testing.T) {
 		SkillTrust: alfred.ProjectSkillTrustUnknown,
 	}
 	resolver := mocks.NewMockProjectResolver(controller)
-	resolver.EXPECT().ResolveProject(gomock.Any(), project.Root).Return(project, nil)
+	resolver.EXPECT().ResolveProject(gomock.Any(), project.Root, gomock.AssignableToTypeOf(time.Time{})).Return(project, nil)
 	inspector := mocks.NewMockProjectSkillInspector(controller)
 	inspector.EXPECT().InspectProjectSkills(gomock.Any(), project.ID).Return(
 		alfred.ProjectSkillTrustState{
@@ -108,7 +109,7 @@ func TestTrustCommandTogglesProjectSkillTrust(t *testing.T) {
 		SkillTrust: alfred.ProjectSkillTrustTrusted,
 	}
 	resolver := mocks.NewMockProjectResolver(controller)
-	resolver.EXPECT().ResolveProject(gomock.Any(), project.Root).Return(project, nil)
+	resolver.EXPECT().ResolveProject(gomock.Any(), project.Root, gomock.AssignableToTypeOf(time.Time{})).Return(project, nil)
 	inspector := mocks.NewMockProjectSkillInspector(controller)
 	inspector.EXPECT().InspectProjectSkills(gomock.Any(), project.ID).Return(
 		alfred.ProjectSkillTrustState{
@@ -151,18 +152,18 @@ func TestMessageSubmissionCreatesAndReusesSession(t *testing.T) {
 			ProjectID: "project-1",
 			Source:    alfred.InvocationSourceUser,
 			Input:     []alfred.ContentPart{alfred.TextContent{Text: "hello"}},
-		}).Return(firstRun, nil),
+		}, gomock.AssignableToTypeOf(time.Time{})).Return(firstRun, nil),
 		invocations.EXPECT().Invoke(gomock.Any(), alfred.InvocationRequest{
 			ProjectID: "project-1",
 			SessionID: firstRun.SessionID,
 			Source:    alfred.InvocationSourceUser,
 			Input:     []alfred.ContentPart{alfred.TextContent{Text: "continue"}},
-		}).Return(secondRun, nil),
+		}, gomock.AssignableToTypeOf(time.Time{})).Return(secondRun, nil),
 		invocations.EXPECT().Invoke(gomock.Any(), alfred.InvocationRequest{
 			ProjectID: "project-1",
 			Source:    alfred.InvocationSourceUser,
 			Input:     []alfred.ContentPart{alfred.TextContent{Text: "fresh message"}},
-		}).Return(thirdRun, nil),
+		}, gomock.AssignableToTypeOf(time.Time{})).Return(thirdRun, nil),
 	)
 	server := connect.NewServer()
 	alfredv1connect.RegisterInvocationServiceHandler(server, rpc.NewInvocationHandler(invocations))
@@ -213,7 +214,7 @@ func TestFailedMessageSubmissionRetainsInput(t *testing.T) {
 	t.Parallel()
 
 	invocations := mocks.NewMockInvocationService(gomock.NewController(t))
-	invocations.EXPECT().Invoke(gomock.Any(), gomock.Any()).Return(
+	invocations.EXPECT().Invoke(gomock.Any(), gomock.Any(), gomock.AssignableToTypeOf(time.Time{})).Return(
 		alfred.Run{}, errors.B.UserMsg("the message could not be sent").Build(),
 	)
 	server := connect.NewServer()

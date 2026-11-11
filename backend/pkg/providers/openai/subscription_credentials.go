@@ -25,7 +25,6 @@ type SubscriptionCredentials struct {
 	credentials alfred.CredentialProvider
 	config      AuthorizationConfig
 	client      *http.Client
-	clock       alfred.Clock
 
 	mu sync.Mutex
 }
@@ -34,14 +33,21 @@ func (record oauthCredentialRecord) directAccessEnabled() bool {
 	return slices.Contains(record.Scopes, requiredDirectScope)
 }
 
+func (record oauthCredentialRecord) needsRefresh(now time.Time) bool {
+	refreshAt := time.Unix(record.ExpiresAt, 0).Add(-refreshBeforeExpiry)
+	if record.EarliestRefreshAt != 0 && time.Unix(record.EarliestRefreshAt, 0).After(refreshAt) {
+		refreshAt = time.Unix(record.EarliestRefreshAt, 0)
+	}
+	return record.AccessToken == "" || !now.Before(refreshAt)
+}
+
 // NewSubscriptionCredentials constructs the renewable credential boundary.
 func NewSubscriptionCredentials(
 	credentials alfred.CredentialProvider,
 	config AuthorizationConfig,
 	client *http.Client,
-	clock alfred.Clock,
 ) *SubscriptionCredentials {
-	return &SubscriptionCredentials{credentials: credentials, config: config, client: client, clock: clock}
+	return &SubscriptionCredentials{credentials: credentials, config: config, client: client}
 }
 
 // AccessToken returns a usable bearer token, refreshing and atomically replacing
@@ -62,12 +68,7 @@ func (credentials *SubscriptionCredentials) AccessToken(
 		return "", errors.B.Op(op).KindFailedPrecondition().Retryable(true).
 			UserMsg("Reconnect OpenAI and enable ChatGPT plan usage.").Build()
 	}
-	now := credentials.clock.Now()
-	refreshAt := time.Unix(record.ExpiresAt, 0).Add(-refreshBeforeExpiry)
-	if record.EarliestRefreshAt != 0 && time.Unix(record.EarliestRefreshAt, 0).After(refreshAt) {
-		refreshAt = time.Unix(record.EarliestRefreshAt, 0)
-	}
-	if record.AccessToken != "" && now.Before(refreshAt) {
+	if !record.needsRefresh(time.Now()) {
 		return record.AccessToken, nil
 	}
 	if record.RefreshToken == "" {
@@ -174,7 +175,7 @@ func (credentials *SubscriptionCredentials) refresh(
 	if tokens.Scope != "" {
 		record.Scopes = strings.Fields(tokens.Scope)
 	}
-	now := credentials.clock.Now()
+	now := time.Now()
 	record.AccessToken = tokens.AccessToken
 	record.RefreshToken = tokens.RefreshToken
 	if tokens.TokenType != "" {
@@ -229,7 +230,6 @@ func (credentials *SubscriptionCredentials) validateReplacementIDToken(
 	}
 	verified, err := provider.VerifierContext(discoveryContext, &oidc.Config{
 		ClientID: record.ClientID,
-		Now:      credentials.clock.Now,
 	}).Verify(discoveryContext, raw)
 	if err != nil {
 		return errors.B.Op(op).KindBadGateway().Text("verify refreshed OpenAI ID token").Build()

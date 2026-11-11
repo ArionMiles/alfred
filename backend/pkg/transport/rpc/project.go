@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -76,7 +77,7 @@ func (handler *ProjectHandler) ResolveProject(
 			Text("request is nil").
 			Build())
 	}
-	project, err := handler.resolver.ResolveProject(ctx, request.GetRoot())
+	project, err := handler.resolver.ResolveProject(ctx, request.GetRoot(), time.Now())
 	if err != nil {
 		return nil, connectError(err)
 	}

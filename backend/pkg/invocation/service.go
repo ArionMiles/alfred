@@ -40,7 +40,6 @@ type Dependencies struct {
 	InvocationIDGenerator alfred.IDGenerator[alfred.InvocationID]
 	SessionIDGenerator    alfred.IDGenerator[alfred.SessionID]
 	RunIDGenerator        alfred.IDGenerator[alfred.RunID]
-	Clock                 alfred.Clock
 	Dispatcher            alfred.RunDispatcher
 	Events                alfred.RunEventSink
 }
@@ -55,7 +54,6 @@ type Service struct {
 	invocationIDGenerator alfred.IDGenerator[alfred.InvocationID]
 	sessionIDGenerator    alfred.IDGenerator[alfred.SessionID]
 	runIDGenerator        alfred.IDGenerator[alfred.RunID]
-	clock                 alfred.Clock
 	dispatcher            alfred.RunDispatcher
 	events                alfred.RunEventSink
 }
@@ -71,7 +69,6 @@ func NewService(dependencies Dependencies) *Service {
 		invocationIDGenerator: dependencies.InvocationIDGenerator,
 		sessionIDGenerator:    dependencies.SessionIDGenerator,
 		runIDGenerator:        dependencies.RunIDGenerator,
-		clock:                 dependencies.Clock,
 		dispatcher:            dependencies.Dispatcher,
 		events:                dependencies.Events,
 	}
@@ -82,6 +79,7 @@ func NewService(dependencies Dependencies) *Service {
 func (service *Service) Invoke(
 	ctx context.Context,
 	request alfred.InvocationRequest,
+	createdAt time.Time,
 ) (alfred.Run, error) {
 	const op = "Invoke"
 
@@ -101,7 +99,6 @@ func (service *Service) Invoke(
 		}
 		return alfred.Run{}, builder.Build()
 	}
-	createdAt := service.clock.Now()
 	session, err := service.getOrCreateSession(
 		ctx,
 		request.ProjectID,

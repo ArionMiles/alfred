@@ -75,7 +75,6 @@ type AuthorizationDependencies struct {
 	Credentials alfred.CredentialProvider
 	IDs         alfred.IDGenerator[alfred.ProviderAuthorizationID]
 	References  alfred.IDGenerator[alfred.CredentialRef]
-	Clock       alfred.Clock
 	HTTPClient  *http.Client
 }
 
@@ -86,7 +85,6 @@ type AuthorizationService struct {
 	credentials alfred.CredentialProvider
 	ids         alfred.IDGenerator[alfred.ProviderAuthorizationID]
 	references  alfred.IDGenerator[alfred.CredentialRef]
-	clock       alfred.Clock
 	client      *http.Client
 	lifecycle   context.Context
 	agentName   string
@@ -151,7 +149,7 @@ func NewAuthorizationService(
 ) *AuthorizationService {
 	service := &AuthorizationService{
 		config: config, store: dependencies.Store, credentials: dependencies.Credentials,
-		ids: dependencies.IDs, references: dependencies.References, clock: dependencies.Clock,
+		ids: dependencies.IDs, references: dependencies.References,
 		client: dependencies.HTTPClient, lifecycle: ctx,
 		attempts:  make(map[alfred.ProviderAuthorizationID]*authorizationAttempt),
 		agentName: "Alfred",
@@ -554,7 +552,7 @@ func (service *AuthorizationService) validateTokens(
 	if err != nil {
 		return oauthCredentialRecord{}, "", errors.B.Op(op).Text("discover OpenAI identity provider").Err(err).Build()
 	}
-	verified, err := provider.VerifierContext(discoveryContext, &oidc.Config{ClientID: clientID, Now: service.clock.Now}).Verify(discoveryContext, tokens.IDToken)
+	verified, err := provider.VerifierContext(discoveryContext, &oidc.Config{ClientID: clientID}).Verify(discoveryContext, tokens.IDToken)
 	if err != nil {
 		return oauthCredentialRecord{}, "", errors.B.Op(op).Text("verify OpenAI ID token").Err(err).Build()
 	}
@@ -576,7 +574,7 @@ func (service *AuthorizationService) validateTokens(
 	if accountLabel == "" {
 		accountLabel = claims.Subject
 	}
-	now := service.clock.Now()
+	now := time.Now()
 	return oauthCredentialRecord{
 		Version: 1, Provider: openAIProviderType, Method: chatGPTSubscriptionMethod, Issuer: service.config.Issuer,
 		Subject: claims.Subject, Email: claims.Email, ClientID: clientID, IDToken: tokens.IDToken,

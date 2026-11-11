@@ -23,7 +23,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ArionMiles/alfred"
-	"github.com/ArionMiles/alfred/pkg/clock"
 	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/providers/openai"
 	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
@@ -200,7 +199,7 @@ func TestAuthorizationRetainsIdentityWithoutDirectTokenScope(t *testing.T) {
 	config := openai.DefaultAuthorizationConfig()
 	config.Issuer = fixture.server.URL
 	config.TokenURL = fixture.server.URL + "/token"
-	manager := openai.NewSubscriptionCredentials(store, config, fixture.server.Client(), clock.System{})
+	manager := openai.NewSubscriptionCredentials(store, config, fixture.server.Client())
 	if _, err := manager.AccessToken(t.Context(), result.Instance.CredentialRef); errors.WhatKind(err) != errors.FailedPrecondition {
 		t.Fatalf("AccessToken() error = %v", err)
 	}
@@ -451,7 +450,7 @@ func TestReauthorizationReusesRegistrationAndPreservesConnectionOnFailure(t *tes
 				if after.CredentialRef == before.CredentialRef {
 					t.Fatal("reauthorization did not save fresh credentials")
 				}
-				manager := openai.NewSubscriptionCredentials(store, openai.DefaultAuthorizationConfig(), fixture.server.Client(), clock.System{})
+				manager := openai.NewSubscriptionCredentials(store, openai.DefaultAuthorizationConfig(), fixture.server.Client())
 				if _, err := manager.AccessToken(t.Context(), after.CredentialRef); err != nil {
 					t.Fatal(err)
 				}
@@ -655,7 +654,7 @@ func newAuthorizationService(t *testing.T, fixture *oauthFixture, store *sqlite.
 	config.TokenURL = fixture.server.URL + "/token"
 	service := openai.NewAuthorizationService(t.Context(), config, openai.AuthorizationDependencies{
 		Store: store, Credentials: store, IDs: authorizationIDGenerator{}, References: identity.Generator[alfred.CredentialRef]{},
-		Clock: clock.System{}, HTTPClient: fixture.server.Client(),
+		HTTPClient: fixture.server.Client(),
 	}, options...)
 	t.Cleanup(service.Close)
 	return service

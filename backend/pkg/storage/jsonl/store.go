@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
@@ -38,7 +39,6 @@ type Store struct {
 	runs             runReader
 	sessions         sessionReader
 	eventIDGenerator alfred.IDGenerator[alfred.RunEventID]
-	clock            alfred.Clock
 	lockSeed         maphash.Seed
 	locks            []sync.Mutex
 }
@@ -49,14 +49,12 @@ func New(
 	runs runReader,
 	sessions sessionReader,
 	eventIDGenerator alfred.IDGenerator[alfred.RunEventID],
-	clock alfred.Clock,
 ) *Store {
 	return &Store{
 		dataDir:          config.DataDir,
 		runs:             runs,
 		sessions:         sessions,
 		eventIDGenerator: eventIDGenerator,
-		clock:            clock,
 		lockSeed:         maphash.MakeSeed(),
 		locks:            make([]sync.Mutex, config.LockShardCount),
 	}
@@ -110,7 +108,7 @@ func (store *Store) Append(ctx context.Context, pending alfred.NewRunEvent) (alf
 		SessionID:  session.ID,
 		RunID:      pending.RunID,
 		Sequence:   sequence,
-		OccurredAt: store.clock.Now(),
+		OccurredAt: time.Now(),
 		Visibility: pending.Visibility,
 		Payload:    pending.Payload,
 	}

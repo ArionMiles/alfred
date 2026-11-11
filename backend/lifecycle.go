@@ -64,9 +64,9 @@ type Project struct {
 }
 
 // ProjectResolver resolves an existing local directory to its durable project,
-// creating the project when the directory has not been seen before.
+// creating the project at the supplied time when the directory has not been seen before.
 type ProjectResolver interface {
-	ResolveProject(context.Context, string) (Project, error)
+	ResolveProject(context.Context, string, time.Time) (Project, error)
 }
 
 // Session is a durable context thread within a project.
@@ -122,9 +122,9 @@ type RunDispatcher interface {
 	Dispatch(context.Context, RunID) error
 }
 
-// InvocationService creates and dispatches runs from invocation requests.
+// InvocationService creates and dispatches runs using the supplied creation time.
 type InvocationService interface {
-	Invoke(context.Context, InvocationRequest) (Run, error)
+	Invoke(context.Context, InvocationRequest, time.Time) (Run, error)
 }
 
 // RunControl supplies external decisions and cancellation to existing runs.

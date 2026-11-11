@@ -3,6 +3,7 @@ package rpc
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -31,7 +32,7 @@ func (handler *InvocationHandler) Invoke(
 	if err != nil {
 		return nil, connectError(err)
 	}
-	run, err := handler.invocations.Invoke(ctx, domainRequest)
+	run, err := handler.invocations.Invoke(ctx, domainRequest, time.Now())
 	if err != nil {
 		return nil, connectError(err)
 	}

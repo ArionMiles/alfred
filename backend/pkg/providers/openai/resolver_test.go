@@ -16,7 +16,6 @@ import (
 
 	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/mocks"
-	"github.com/ArionMiles/alfred/pkg/clock"
 	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/providers"
 	provideropenai "github.com/ArionMiles/alfred/pkg/providers/openai"
@@ -252,7 +251,7 @@ func TestConfiguredProviderResolvesChatGPTSubscription(t *testing.T) {
 	catalog.URL, catalog.CacheFile = server.URL+"/catalog", filepath.Join(t.TempDir(), "models.dev.json")
 	registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(provideropenai.NewResolver(
 		store, store,
-		provideropenai.NewSubscriptionCredentials(store, provideropenai.DefaultAuthorizationConfig(), server.Client(), clock.System{}),
+		provideropenai.NewSubscriptionCredentials(store, provideropenai.DefaultAuthorizationConfig(), server.Client()),
 		providers.NewCatalogSource(catalog, server.Client()), server.Client(),
 	)))
 	if err != nil {
@@ -292,7 +291,7 @@ func TestOpenAIResolverRequiresOpenAIModelMetadata(t *testing.T) {
 			catalog.URL, catalog.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
 			resolver := provideropenai.NewResolver(
 				store, store,
-				provideropenai.NewSubscriptionCredentials(store, provideropenai.DefaultAuthorizationConfig(), server.Client(), clock.System{}),
+				provideropenai.NewSubscriptionCredentials(store, provideropenai.DefaultAuthorizationConfig(), server.Client()),
 				providers.NewCatalogSource(catalog, server.Client()), server.Client(),
 			)
 			provider, err := resolver.ResolveProvider(t.Context(), instance.ID)

@@ -25,7 +25,7 @@ func TestProjectHandlerResolvesProject(t *testing.T) {
 	}
 	controller := gomock.NewController(t)
 	resolver := mocks.NewMockProjectResolver(controller)
-	resolver.EXPECT().ResolveProject(gomock.Any(), project.Root).Return(project, nil)
+	resolver.EXPECT().ResolveProject(gomock.Any(), project.Root, gomock.AssignableToTypeOf(time.Time{})).Return(project, nil)
 	handler := NewProjectHandler(
 		resolver,
 		mocks.NewMockProjectSkillInspector(controller),

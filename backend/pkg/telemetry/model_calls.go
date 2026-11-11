@@ -12,11 +12,10 @@ import (
 )
 
 // ModelCalls records metrics for every provider stream.
-func ModelCalls(clock alfred.Clock, events alfred.RunEventSink) providers.Middleware {
+func ModelCalls(events alfred.RunEventSink) providers.Middleware {
 	return func(provider alfred.ModelProvider) alfred.ModelProvider {
 		return &modelCallProvider{
 			next:   provider,
-			clock:  clock,
 			events: events,
 		}
 	}
@@ -24,7 +23,6 @@ func ModelCalls(clock alfred.Clock, events alfred.RunEventSink) providers.Middle
 
 type modelCallProvider struct {
 	next   alfred.ModelProvider
-	clock  alfred.Clock
 	events alfred.RunEventSink
 }
 
@@ -51,7 +49,7 @@ func (provider *modelCallProvider) Stream(
 	return func(yield func(alfred.ModelEvent, error) bool) {
 		const op = "Stream"
 
-		dispatchedAt := provider.clock.Now()
+		dispatchedAt := time.Now()
 		metrics := alfred.ModelCallMetrics{
 			CallID: request.ID,
 			Model:  request.Model,
@@ -65,7 +63,7 @@ func (provider *modelCallProvider) Stream(
 				if ctx.Err() != nil {
 					metrics.Outcome = alfred.ModelCallOutcomeCancelled
 				}
-				finishModelCall(&metrics, provider.clock.Now())
+				finishModelCall(&metrics, time.Now())
 				if telemetryErr := provider.record(context.WithoutCancel(ctx), request.RunID, metrics); telemetryErr != nil {
 					streamErr = errors.B.
 						Op(op).
@@ -78,14 +76,14 @@ func (provider *modelCallProvider) Stream(
 				return
 			}
 
-			eventAt := provider.clock.Now()
+			eventAt := time.Now()
 			observeModelEvent(&metrics, event, dispatchedAt, eventAt)
 			if _, ok := event.Payload.(alfred.ModelCompleted); ok {
 				completed = true
 			}
 			if !yield(event, nil) {
 				metrics.Outcome = alfred.ModelCallOutcomeFailed
-				finishModelCall(&metrics, provider.clock.Now())
+				finishModelCall(&metrics, time.Now())
 				_ = provider.record(context.WithoutCancel(ctx), request.RunID, metrics)
 				return
 			}
@@ -95,7 +93,7 @@ func (provider *modelCallProvider) Stream(
 		if completed {
 			metrics.Outcome = alfred.ModelCallOutcomeCompleted
 		}
-		finishModelCall(&metrics, provider.clock.Now())
+		finishModelCall(&metrics, time.Now())
 		if err := provider.record(context.WithoutCancel(ctx), request.RunID, metrics); err != nil {
 			yield(alfred.ModelEvent{}, errors.B.
 				Op(op).

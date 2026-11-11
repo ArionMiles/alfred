@@ -4,6 +4,7 @@ package project
 import (
 	"context"
 	"path/filepath"
+	"time"
 
 	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
@@ -18,24 +19,21 @@ type projectStore interface {
 type Service struct {
 	projects  projectStore
 	projectID alfred.IDGenerator[alfred.ProjectID]
-	clock     alfred.Clock
 }
 
 // NewService creates a project resolver from its runtime dependencies.
 func NewService(
 	projects projectStore,
 	projectID alfred.IDGenerator[alfred.ProjectID],
-	clock alfred.Clock,
 ) *Service {
 	return &Service{
 		projects:  projects,
 		projectID: projectID,
-		clock:     clock,
 	}
 }
 
 // ResolveProject returns the project for root, creating it when necessary.
-func (service *Service) ResolveProject(ctx context.Context, root string) (alfred.Project, error) {
+func (service *Service) ResolveProject(ctx context.Context, root string, createdAt time.Time) (alfred.Project, error) {
 	const op = "ResolveProject"
 
 	canonicalRoot, err := filepath.Abs(root)
@@ -80,7 +78,7 @@ func (service *Service) ResolveProject(ctx context.Context, root string) (alfred
 		Name:       filepath.Base(canonicalRoot),
 		Root:       canonicalRoot,
 		SkillTrust: alfred.ProjectSkillTrustUnknown,
-		CreatedAt:  service.clock.Now(),
+		CreatedAt:  createdAt,
 	}
 	if err := service.projects.CreateProject(ctx, project); err != nil {
 		if errors.WhatKind(err) == errors.Conflict {

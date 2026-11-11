@@ -18,7 +18,7 @@ import (
 func TestNewUsesConfig(t *testing.T) {
 	t.Parallel()
 
-	store := New(Config{DataDir: "events", LockShardCount: 3}, nil, nil, nil, nil)
+	store := New(Config{DataDir: "events", LockShardCount: 3}, nil, nil, nil)
 	if store.dataDir != "events" {
 		t.Fatalf("data directory = %q, want events", store.dataDir)
 	}
@@ -39,6 +39,7 @@ func TestStoreAppendsSessionSequenceAndReadsViews(t *testing.T) {
 	sessions := sessionReaderStub{sessions: map[alfred.SessionID]alfred.Session{session.ID: session}}
 	store := newTestStore(dataDir, runs, sessions, "event-")
 
+	before := time.Now()
 	first, err := store.Append(t.Context(), alfred.NewRunEvent{
 		RunID: "run-1", Visibility: alfred.RunEventVisibilityUser,
 		Payload: alfred.RunStateChanged{Status: alfred.RunStatusRunning},
@@ -61,6 +62,12 @@ func TestStoreAppendsSessionSequenceAndReadsViews(t *testing.T) {
 	}
 	if first.SessionID != session.ID || second.SessionID != session.ID {
 		t.Fatalf("event session IDs = %q, %q, want %q", first.SessionID, second.SessionID, session.ID)
+	}
+	after := time.Now()
+	for _, event := range []alfred.RunEvent{first, second} {
+		if event.OccurredAt.Before(before) || event.OccurredAt.After(after) {
+			t.Fatalf("event timestamp = %v, outside append interval [%v, %v]", event.OccurredAt, before, after)
+		}
 	}
 
 	path := filepath.Join(dataDir, "projects", "project-1", "session-1.jsonl")
@@ -202,7 +209,6 @@ func newTestStore(
 		runs,
 		sessions,
 		&eventIDGeneratorStub{prefix: prefix},
-		&clockSequenceStub{now: time.Date(2026, time.October, 24, 10, 0, 0, 0, time.UTC)},
 	)
 }
 
@@ -252,17 +258,4 @@ func (generator *eventIDGeneratorStub) New() (alfred.RunEventID, error) {
 	defer generator.mu.Unlock()
 	generator.next++
 	return alfred.RunEventID(generator.prefix + strconv.Itoa(generator.next)), nil
-}
-
-type clockSequenceStub struct {
-	mu  sync.Mutex
-	now time.Time
-}
-
-func (clock *clockSequenceStub) Now() time.Time {
-	clock.mu.Lock()
-	defer clock.mu.Unlock()
-	now := clock.now
-	clock.now = clock.now.Add(time.Second)
-	return now
 }

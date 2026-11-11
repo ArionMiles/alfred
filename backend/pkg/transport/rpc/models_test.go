@@ -18,7 +18,6 @@ import (
 	alfredv1 "github.com/ArionMiles/alfred/gen/alfred/v1"
 	"github.com/ArionMiles/alfred/gen/alfred/v1/alfredv1connect"
 	"github.com/ArionMiles/alfred/mocks"
-	systemclock "github.com/ArionMiles/alfred/pkg/clock"
 	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/invocation"
 	"github.com/ArionMiles/alfred/pkg/providers"
@@ -133,8 +132,7 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
 			t.Error(err)
 		}
 	})
-	clock := systemclock.System{}
-	if err := store.CreateProject(t.Context(), alfred.Project{ID: "project-1", Root: t.TempDir(), SkillTrust: alfred.ProjectSkillTrustUnknown, CreatedAt: clock.Now()}); err != nil {
+	if err := store.CreateProject(t.Context(), alfred.Project{ID: "project-1", Root: t.TempDir(), SkillTrust: alfred.ProjectSkillTrustUnknown, CreatedAt: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
 	source := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -174,11 +172,11 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
 	modelService := providers.NewModelService(store, registry, store)
 	dispatcher := mocks.NewMockRunDispatcher(gomock.NewController(t))
 	dispatcher.EXPECT().Dispatch(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	events := jsonl.New(jsonl.Config{DataDir: t.TempDir(), LockShardCount: 64}, store, store, identity.Generator[alfred.RunEventID]{}, clock)
+	events := jsonl.New(jsonl.Config{DataDir: t.TempDir(), LockShardCount: 64}, store, store, identity.Generator[alfred.RunEventID]{})
 	invocations := invocation.NewService(invocation.Dependencies{
 		ModelSelection: store, Projects: store, Sessions: store, Invocations: store, Runs: store,
 		InvocationIDGenerator: identity.Generator[alfred.InvocationID]{}, SessionIDGenerator: identity.Generator[alfred.SessionID]{}, RunIDGenerator: identity.Generator[alfred.RunID]{},
-		Clock: clock, Dispatcher: dispatcher, Events: events,
+		Dispatcher: dispatcher, Events: events,
 	})
 	server := httptest.NewServer(NewServer(Handlers{
 		Models: NewModelHandler(modelService), Invocation: NewInvocationHandler(invocations),

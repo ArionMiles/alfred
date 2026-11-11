@@ -16,7 +16,7 @@ import (
 func TestSubscriptionProviderUsesAccountModelsAndNamespacedTools(t *testing.T) {
 	t.Parallel()
 	store := newSubscriptionCredentialStore(t)
-	now := time.Unix(1_700_000_000, 0)
+	now := time.Now().Truncate(time.Second)
 	ref := seedSubscriptionCredential(t, store, oauthCredentialRecord{
 		AccessToken: "subscription-access", RefreshToken: "subscription-refresh", Scopes: []string{requiredDirectScope},
 		ExpiresAt: now.Add(time.Hour).Unix(),
@@ -49,7 +49,7 @@ func TestSubscriptionProviderUsesAccountModelsAndNamespacedTools(t *testing.T) {
 	t.Cleanup(server.Close)
 	config := DefaultConfig()
 	config.BaseURL = server.URL + "/v1"
-	manager := NewSubscriptionCredentials(store, DefaultAuthorizationConfig(), server.Client(), fixedClock{now})
+	manager := NewSubscriptionCredentials(store, DefaultAuthorizationConfig(), server.Client())
 	provider := NewSubscription("openai", config, []alfred.ModelInfo{
 		{Ref: alfred.ModelRef{ModelID: "test-model"}, Name: "Catalog test", Capabilities: alfred.ModelCapabilities{Reasoning: true}},
 		{Ref: alfred.ModelRef{ModelID: "second-model"}, Name: "Catalog second"},
@@ -223,7 +223,7 @@ func TestSubscriptionFailuresPreserveRecoveryAndNeverCompletePartialOutput(t *te
 func subscriptionTestProvider(t *testing.T, server *httptest.Server) *Provider {
 	t.Helper()
 	store := newSubscriptionCredentialStore(t)
-	now := time.Unix(1_700_000_000, 0)
+	now := time.Now().Truncate(time.Second)
 	ref := seedSubscriptionCredential(t, store, oauthCredentialRecord{
 		AccessToken: "subscription-access", RefreshToken: "subscription-refresh", Scopes: []string{requiredDirectScope},
 		ExpiresAt: now.Add(time.Hour).Unix(),
@@ -233,7 +233,7 @@ func subscriptionTestProvider(t *testing.T, server *httptest.Server) *Provider {
 	return NewSubscription("openai", config, []alfred.ModelInfo{{
 		Ref: alfred.ModelRef{ModelID: "test-model"}, Capabilities: alfred.ModelCapabilities{Reasoning: true},
 	}}, SubscriptionDependencies{
-		Credentials:   NewSubscriptionCredentials(store, DefaultAuthorizationConfig(), server.Client(), fixedClock{now}),
+		Credentials:   NewSubscriptionCredentials(store, DefaultAuthorizationConfig(), server.Client()),
 		CredentialRef: ref, HTTPClient: server.Client(),
 	})
 }

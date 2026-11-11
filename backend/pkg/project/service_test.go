@@ -19,9 +19,9 @@ func TestResolveProjectReturnsExistingCanonicalRoot(t *testing.T) {
 	controller := gomock.NewController(t)
 	projects := mocks.NewMockProjectStore(controller)
 	projects.EXPECT().GetProjectByRoot(gomock.Any(), root).Return(want, nil)
-	service := NewService(projects, nil, nil)
+	service := NewService(projects, nil)
 
-	got, err := service.ResolveProject(t.Context(), root)
+	got, err := service.ResolveProject(t.Context(), root, time.Time{})
 	if err != nil {
 		t.Fatalf("ResolveProject() error = %v", err)
 	}
@@ -43,16 +43,14 @@ func TestResolveProjectCreatesUnknownRoot(t *testing.T) {
 	}
 	controller := gomock.NewController(t)
 	projects := mocks.NewMockProjectStore(controller)
-	clock := mocks.NewMockClock(controller)
 	projects.EXPECT().GetProjectByRoot(gomock.Any(), root).Return(
 		alfred.Project{},
 		errors.B.KindNotFound().Build(),
 	)
-	clock.EXPECT().Now().Return(createdAt)
 	projects.EXPECT().CreateProject(gomock.Any(), want).Return(nil)
-	service := NewService(projects, projectIDGenerator{id: want.ID}, clock)
+	service := NewService(projects, projectIDGenerator{id: want.ID})
 
-	got, err := service.ResolveProject(t.Context(), root)
+	got, err := service.ResolveProject(t.Context(), root, createdAt)
 	if err != nil {
 		t.Fatalf("ResolveProject() error = %v", err)
 	}
@@ -63,9 +61,9 @@ func TestResolveProjectCreatesUnknownRoot(t *testing.T) {
 
 func TestResolveProjectRejectsMissingRoot(t *testing.T) {
 	t.Parallel()
-	service := NewService(nil, nil, nil)
+	service := NewService(nil, nil)
 
-	_, err := service.ResolveProject(t.Context(), filepath.Join(t.TempDir(), "missing"))
+	_, err := service.ResolveProject(t.Context(), filepath.Join(t.TempDir(), "missing"), time.Time{})
 	if errors.WhatKind(err) != errors.InvalidArgument {
 		t.Fatalf("ResolveProject() error = %v, want invalid argument", err)
 	}
@@ -78,19 +76,17 @@ func TestResolveProjectReturnsConcurrentCreationWinner(t *testing.T) {
 	winner := alfred.Project{ID: "project-winner", Root: root}
 	controller := gomock.NewController(t)
 	projects := mocks.NewMockProjectStore(controller)
-	clock := mocks.NewMockClock(controller)
 	projects.EXPECT().GetProjectByRoot(gomock.Any(), root).Return(
 		alfred.Project{},
 		errors.B.KindNotFound().Build(),
 	)
-	clock.EXPECT().Now().Return(createdAt)
 	projects.EXPECT().CreateProject(gomock.Any(), gomock.Any()).Return(
 		errors.B.KindConflict().Build(),
 	)
 	projects.EXPECT().GetProjectByRoot(gomock.Any(), root).Return(winner, nil)
-	service := NewService(projects, projectIDGenerator{id: "project-loser"}, clock)
+	service := NewService(projects, projectIDGenerator{id: "project-loser"})
 
-	got, err := service.ResolveProject(t.Context(), root)
+	got, err := service.ResolveProject(t.Context(), root, createdAt)
 	if err != nil {
 		t.Fatalf("ResolveProject() error = %v", err)
 	}

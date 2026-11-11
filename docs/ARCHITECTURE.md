@@ -22,6 +22,13 @@ private, narrow interface can be satisfied by an SDK user's implementation.
 Shared contracts are useful when they establish common semantics, rather than
 merely collecting methods that happen to be used together.
 
+Core operations receive creation timestamps from their callers rather than
+depending on a shared clock abstraction. Time-dependent decisions accept an
+explicit instant so their boundary behavior can be tested directly. Infrastructure
+that observes multiple moments, such as streaming measurements and network token
+renewal, reads current time at each observation rather than reusing an earlier
+timestamp for the whole operation.
+
 ## Execution belongs to the service
 
 A conversation should survive closing a terminal or reconnecting through a

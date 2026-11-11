@@ -44,7 +44,7 @@ func TestInvocationHandlerMapsRequestAndResponse(t *testing.T) {
 		CreatedAt:    createdAt,
 	}
 	service := mocks.NewMockInvocationService(gomock.NewController(t))
-	service.EXPECT().Invoke(gomock.Any(), domainRequest).Return(run, nil)
+	service.EXPECT().Invoke(gomock.Any(), domainRequest, gomock.AssignableToTypeOf(time.Time{})).Return(run, nil)
 	handler := NewInvocationHandler(service)
 
 	response, err := handler.Invoke(t.Context(), &alfredv1.InvokeRequest{
@@ -130,7 +130,7 @@ func TestInvocationHandlerAcceptsExternalSources(t *testing.T) {
 			service.EXPECT().Invoke(gomock.Any(), alfred.InvocationRequest{
 				Source: test.domain,
 				Input:  []alfred.ContentPart{},
-			}).Return(
+			}, gomock.AssignableToTypeOf(time.Time{})).Return(
 				alfred.Run{Status: alfred.RunStatusQueued},
 				nil,
 			)
@@ -152,7 +152,7 @@ func TestInvocationHandlerMapsSafeApplicationError(t *testing.T) {
 		UserMsg("the project could not be found").
 		Build()
 	service := mocks.NewMockInvocationService(gomock.NewController(t))
-	service.EXPECT().Invoke(gomock.Any(), gomock.Any()).Return(alfred.Run{}, serviceErr)
+	service.EXPECT().Invoke(gomock.Any(), gomock.Any(), gomock.AssignableToTypeOf(time.Time{})).Return(alfred.Run{}, serviceErr)
 	handler := NewInvocationHandler(service)
 
 	_, err := handler.Invoke(t.Context(), &alfredv1.InvokeRequest{
@@ -178,7 +178,7 @@ func TestInvocationHandlerHidesInternalErrorText(t *testing.T) {
 
 	serviceErr := errors.B.Text("private diagnostic detail").Build()
 	service := mocks.NewMockInvocationService(gomock.NewController(t))
-	service.EXPECT().Invoke(gomock.Any(), gomock.Any()).Return(alfred.Run{}, serviceErr)
+	service.EXPECT().Invoke(gomock.Any(), gomock.Any(), gomock.AssignableToTypeOf(time.Time{})).Return(alfred.Run{}, serviceErr)
 	handler := NewInvocationHandler(service)
 
 	_, err := handler.Invoke(t.Context(), &alfredv1.InvokeRequest{

@@ -22,22 +22,58 @@ import (
 func TestSubscriptionCredentialsReturnsCurrentAccessToken(t *testing.T) {
 	t.Parallel()
 	store := newSubscriptionCredentialStore(t)
-	now := time.Unix(1_700_000_000, 0)
+	now := time.Now().Truncate(time.Second)
 	ref := seedSubscriptionCredential(t, store, oauthCredentialRecord{
 		AccessToken: "current-access", RefreshToken: "current-refresh", Scopes: []string{requiredDirectScope},
 		ExpiresAt: now.Add(time.Hour).Unix(),
 	})
-	manager := NewSubscriptionCredentials(store, DefaultAuthorizationConfig(), http.DefaultClient, fixedClock{now})
+	manager := NewSubscriptionCredentials(store, DefaultAuthorizationConfig(), http.DefaultClient)
 	token, err := manager.AccessToken(t.Context(), ref)
 	if err != nil || token != "current-access" {
 		t.Fatalf("AccessToken() = %q, %v", token, err)
 	}
 }
 
+func TestCredentialNeedsRefresh(t *testing.T) {
+	t.Parallel()
+	expiresAt := time.Unix(1_700_000_000, 0)
+	refreshAt := expiresAt.Add(-refreshBeforeExpiry)
+	deferredRefresh := expiresAt.Add(time.Minute)
+	tests := map[string]struct {
+		now               time.Time
+		earliestRefreshAt int64
+		accessToken       string
+		want              bool
+	}{
+		"before threshold": {now: refreshAt.Add(-time.Nanosecond), accessToken: "token"},
+		"at threshold":     {now: refreshAt, accessToken: "token", want: true},
+		"after threshold":  {now: refreshAt.Add(time.Nanosecond), accessToken: "token", want: true},
+		"missing token":    {now: refreshAt.Add(-time.Hour), want: true},
+		"deferred refresh": {now: expiresAt, earliestRefreshAt: deferredRefresh.Unix(), accessToken: "token"},
+		"at deferred refresh": {
+			now: deferredRefresh, earliestRefreshAt: deferredRefresh.Unix(), accessToken: "token", want: true,
+		},
+		"earlier hint preserves threshold": {
+			now: refreshAt, earliestRefreshAt: refreshAt.Add(-time.Minute).Unix(), accessToken: "token", want: true,
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			record := oauthCredentialRecord{
+				AccessToken: test.accessToken, ExpiresAt: expiresAt.Unix(), EarliestRefreshAt: test.earliestRefreshAt,
+			}
+			if got := record.needsRefresh(test.now); got != test.want {
+				t.Fatalf("needsRefresh(%v) = %v, want %v", test.now, got, test.want)
+			}
+		})
+	}
+}
+
 func TestSubscriptionCredentialsSerializesRotatingRefresh(t *testing.T) {
 	t.Parallel()
 	store := newSubscriptionCredentialStore(t)
-	now := time.Unix(1_700_000_000, 0)
+	now := time.Now().Truncate(time.Second)
 	ref := seedSubscriptionCredential(t, store, oauthCredentialRecord{
 		AccessToken: "expired-access", RefreshToken: "old-refresh", Scopes: []string{requiredDirectScope},
 		ExpiresAt: now.Add(-time.Minute).Unix(),
@@ -61,7 +97,7 @@ func TestSubscriptionCredentialsSerializesRotatingRefresh(t *testing.T) {
 	t.Cleanup(server.Close)
 	config := DefaultAuthorizationConfig()
 	config.TokenURL = server.URL
-	manager := NewSubscriptionCredentials(store, config, server.Client(), fixedClock{now})
+	manager := NewSubscriptionCredentials(store, config, server.Client())
 
 	const callers = 8
 	var wait sync.WaitGroup
@@ -89,7 +125,8 @@ func TestSubscriptionCredentialsSerializesRotatingRefresh(t *testing.T) {
 	}
 	record := readSubscriptionCredential(t, store, ref)
 	if record.AccessToken != "new-access" || record.RefreshToken != "new-refresh" ||
-		record.SavedAt != now.Unix() || record.ExpiresAt != now.Add(time.Hour).Unix() {
+		record.SavedAt < now.Unix() || record.SavedAt > time.Now().Unix() ||
+		record.ExpiresAt != record.SavedAt+3600 {
 		t.Fatalf("saved replacement = %#v", record)
 	}
 }
@@ -97,7 +134,7 @@ func TestSubscriptionCredentialsSerializesRotatingRefresh(t *testing.T) {
 func TestSubscriptionCredentialsClearsInvalidRotatingTokens(t *testing.T) {
 	t.Parallel()
 	store := newSubscriptionCredentialStore(t)
-	now := time.Unix(1_700_000_000, 0)
+	now := time.Now().Truncate(time.Second)
 	ref := seedSubscriptionCredential(t, store, oauthCredentialRecord{
 		IDToken: "identity-token", AccessToken: "expired-access", RefreshToken: "invalid-refresh",
 		Scopes: []string{requiredDirectScope}, ExpiresAt: now.Add(-time.Minute).Unix(),
@@ -109,7 +146,7 @@ func TestSubscriptionCredentialsClearsInvalidRotatingTokens(t *testing.T) {
 	t.Cleanup(server.Close)
 	config := DefaultAuthorizationConfig()
 	config.TokenURL = server.URL
-	manager := NewSubscriptionCredentials(store, config, server.Client(), fixedClock{now})
+	manager := NewSubscriptionCredentials(store, config, server.Client())
 	if _, err := manager.AccessToken(t.Context(), ref); errors.WhatKind(err) != errors.Unauthenticated {
 		t.Fatalf("AccessToken() error = %v", err)
 	}
@@ -123,7 +160,7 @@ func TestSubscriptionCredentialsClearsInvalidRotatingTokens(t *testing.T) {
 func TestSubscriptionCredentialsPreservesTokensAfterTransientFailure(t *testing.T) {
 	t.Parallel()
 	store := newSubscriptionCredentialStore(t)
-	now := time.Unix(1_700_000_000, 0)
+	now := time.Now().Truncate(time.Second)
 	ref := seedSubscriptionCredential(t, store, oauthCredentialRecord{
 		AccessToken: "expired-access", RefreshToken: "retry-refresh", Scopes: []string{requiredDirectScope},
 		ExpiresAt: now.Add(-time.Minute).Unix(),
@@ -134,7 +171,7 @@ func TestSubscriptionCredentialsPreservesTokensAfterTransientFailure(t *testing.
 	t.Cleanup(server.Close)
 	config := DefaultAuthorizationConfig()
 	config.TokenURL = server.URL
-	manager := NewSubscriptionCredentials(store, config, server.Client(), fixedClock{now})
+	manager := NewSubscriptionCredentials(store, config, server.Client())
 	if _, err := manager.AccessToken(t.Context(), ref); errors.WhatKind(err) != errors.Unavailable || !errors.IsRetryable(err) {
 		t.Fatalf("AccessToken() error = %v", err)
 	}
@@ -152,7 +189,7 @@ func TestSubscriptionCredentialsReusesRotatedTokenAfterDatabaseRestart(t *testin
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	now := time.Unix(1_700_000_000, 0)
+	now := time.Now().Truncate(time.Second)
 	ref := seedSubscriptionCredential(t, store, oauthCredentialRecord{
 		AccessToken: "expired", RefreshToken: "first-refresh", IDToken: "retained-identity",
 		Scopes: []string{requiredDirectScope}, ExpiresAt: now.Add(-time.Minute).Unix(),
@@ -170,8 +207,17 @@ func TestSubscriptionCredentialsReusesRotatedTokenAfterDatabaseRestart(t *testin
 	t.Cleanup(server.Close)
 	authConfig := DefaultAuthorizationConfig()
 	authConfig.TokenURL = server.URL
-	manager := NewSubscriptionCredentials(store, authConfig, server.Client(), fixedClock{now})
+	manager := NewSubscriptionCredentials(store, authConfig, server.Client())
 	if _, err := manager.AccessToken(t.Context(), ref); err != nil {
+		t.Fatal(err)
+	}
+	replacement := readSubscriptionCredential(t, store, ref)
+	replacement.ExpiresAt = now.Add(-time.Minute).Unix()
+	data, err := json.Marshal(replacement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutCredential(t.Context(), ref, data); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
@@ -181,7 +227,7 @@ func TestSubscriptionCredentialsReusesRotatedTokenAfterDatabaseRestart(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager = NewSubscriptionCredentials(store, authConfig, server.Client(), fixedClock{now.Add(2 * time.Hour)})
+	manager = NewSubscriptionCredentials(store, authConfig, server.Client())
 	if _, err := manager.AccessToken(t.Context(), ref); err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +243,7 @@ func TestSubscriptionCredentialsReusesRotatedTokenAfterDatabaseRestart(t *testin
 func TestSubscriptionCredentialsDoesNotReturnTokenAfterScopeLoss(t *testing.T) {
 	t.Parallel()
 	store := newSubscriptionCredentialStore(t)
-	now := time.Unix(1_700_000_000, 0)
+	now := time.Now().Truncate(time.Second)
 	ref := seedSubscriptionCredential(t, store, oauthCredentialRecord{
 		AccessToken: "expired", RefreshToken: "first-refresh", Scopes: []string{requiredDirectScope},
 		ExpiresAt: now.Add(-time.Minute).Unix(),
@@ -210,7 +256,7 @@ func TestSubscriptionCredentialsDoesNotReturnTokenAfterScopeLoss(t *testing.T) {
 	t.Cleanup(server.Close)
 	config := DefaultAuthorizationConfig()
 	config.TokenURL = server.URL
-	manager := NewSubscriptionCredentials(store, config, server.Client(), fixedClock{now})
+	manager := NewSubscriptionCredentials(store, config, server.Client())
 	token, err := manager.AccessToken(t.Context(), ref)
 	if token != "" || errors.WhatKind(err) != errors.FailedPrecondition {
 		t.Fatalf("AccessToken() = %q, %v", token, err)
@@ -223,7 +269,7 @@ func TestSubscriptionCredentialsDoesNotReturnTokenAfterScopeLoss(t *testing.T) {
 func TestSubscriptionCredentialsPersistsRotationWhenRequestIsCanceled(t *testing.T) {
 	t.Parallel()
 	store := newSubscriptionCredentialStore(t)
-	now := time.Unix(1_700_000_000, 0)
+	now := time.Now().Truncate(time.Second)
 	ref := seedSubscriptionCredential(t, store, oauthCredentialRecord{
 		AccessToken: "expired", RefreshToken: "first-refresh", Scopes: []string{requiredDirectScope},
 		ExpiresAt: now.Add(-time.Minute).Unix(),
@@ -238,12 +284,17 @@ func TestSubscriptionCredentialsPersistsRotationWhenRequestIsCanceled(t *testing
 	config.TokenURL = server.URL
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	clock := mocks.NewMockClock(gomock.NewController(t))
-	gomock.InOrder(
-		clock.EXPECT().Now().Return(now),
-		clock.EXPECT().Now().DoAndReturn(func() time.Time { cancel(); return now }),
-	)
-	manager := NewSubscriptionCredentials(store, config, server.Client(), clock)
+	credentials := mocks.NewMockCredentialProvider(gomock.NewController(t))
+	credentials.EXPECT().GetCredential(gomock.Any(), ref).DoAndReturn(store.GetCredential)
+	credentials.EXPECT().PutCredential(gomock.Any(), ref, gomock.Any()).DoAndReturn(func(
+		saveContext context.Context,
+		ref alfred.CredentialRef,
+		data []byte,
+	) error {
+		cancel()
+		return store.PutCredential(saveContext, ref, data)
+	})
+	manager := NewSubscriptionCredentials(credentials, config, server.Client())
 	if _, err := manager.AccessToken(ctx, ref); err != nil {
 		t.Fatal(err)
 	}
@@ -252,10 +303,6 @@ func TestSubscriptionCredentialsPersistsRotationWhenRequestIsCanceled(t *testing
 		t.Fatal("cancellation discarded the rotated credential")
 	}
 }
-
-type fixedClock struct{ now time.Time }
-
-func (clock fixedClock) Now() time.Time { return clock.now }
 
 func newSubscriptionCredentialStore(t *testing.T) *sqlite.Store {
 	t.Helper()

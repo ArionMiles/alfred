@@ -17,7 +17,6 @@ import (
 	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/internal/config"
 	"github.com/ArionMiles/alfred/pkg/agent"
-	systemclock "github.com/ArionMiles/alfred/pkg/clock"
 	contextbuilder "github.com/ArionMiles/alfred/pkg/context"
 	"github.com/ArionMiles/alfred/pkg/daemon"
 	"github.com/ArionMiles/alfred/pkg/events"
@@ -134,14 +133,12 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 		return nil, errors.B.Op(op).Text("open SQLite store").Err(err).Err(owner.Close()).Build()
 	}
 
-	clock := systemclock.System{}
 	broker := events.NewBroker()
 	eventStore := jsonl.New(
 		jsonl.Config{DataDir: dataDir, LockShardCount: 64},
 		store,
 		store,
 		identity.Generator[alfred.RunEventID]{},
-		clock,
 	)
 	eventSink := events.NewNotifyingEventSink(eventStore, broker)
 	userHome, err := os.UserHomeDir()
@@ -165,12 +162,12 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 		providers.WithConfiguredProviders(openaiAuthorization.NewResolver(
 			store, store,
 			openaiAuthorization.NewSubscriptionCredentials(
-				store, openaiAuthorization.DefaultAuthorizationConfig(), webClient, clock,
+				store, openaiAuthorization.DefaultAuthorizationConfig(), webClient,
 			),
 			providers.NewCatalogSource(catalogConfig, &http.Client{Timeout: 15 * time.Second}),
 			http.DefaultClient,
 		)),
-		providers.WithMiddleware(telemetry.ModelCalls(clock, eventSink)),
+		providers.WithMiddleware(telemetry.ModelCalls(eventSink)),
 	)
 	if err != nil {
 		return nil, compositionError("create provider registry", err, store, owner)
@@ -205,12 +202,11 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 			InvocationIDGenerator: identity.Generator[alfred.InvocationID]{},
 			SessionIDGenerator:    identity.Generator[alfred.SessionID]{},
 			RunIDGenerator:        identity.Generator[alfred.RunID]{},
-			Clock:                 clock,
 			Dispatcher:            dispatcher,
 			Events:                eventSink,
 		},
 	)
-	projectService := project.NewService(store, identity.Generator[alfred.ProjectID]{}, clock)
+	projectService := project.NewService(store, identity.Generator[alfred.ProjectID]{})
 	providerSetup, err := providers.NewSetupService(providers.SetupDefinitions())
 	if err != nil {
 		return nil, compositionError("create provider setup service", err, store, owner)
@@ -221,7 +217,7 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 		openaiAuthorization.DefaultAuthorizationConfig(),
 		openaiAuthorization.AuthorizationDependencies{
 			Store: store, Credentials: store, IDs: identity.Generator[alfred.ProviderAuthorizationID]{},
-			References: identity.Generator[alfred.CredentialRef]{}, Clock: clock, HTTPClient: webClient,
+			References: identity.Generator[alfred.CredentialRef]{}, HTTPClient: webClient,
 		},
 	)
 	modelService := providers.NewModelService(store, providerRegistry, store)
