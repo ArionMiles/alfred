@@ -2,7 +2,7 @@ package tui
 
 import "testing"
 
-func TestValidateConfigRejectsInvalidBindings(t *testing.T) {
+func TestConfigValidRejectsInvalidBindings(t *testing.T) {
 	for name, keys := range map[string]KeybindingsConfig{
 		"empty submit":    {Interrupt: []string{"ctrl+c"}, Palette: []string{"ctrl+p"}},
 		"empty interrupt": {Submit: []string{"enter"}, Palette: []string{"ctrl+p"}},
@@ -15,7 +15,7 @@ func TestValidateConfigRejectsInvalidBindings(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if err := ValidateConfig(Config{Keybindings: keys}); err == nil {
+			if err := (Config{Keybindings: keys}).Valid(); err == nil {
 				t.Fatal("invalid keybindings were accepted")
 			}
 		})

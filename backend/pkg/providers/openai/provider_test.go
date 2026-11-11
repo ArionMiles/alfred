@@ -264,7 +264,7 @@ func TestServiceUsesExplicitSettings(t *testing.T) {
 }
 
 func testProvider(server *httptest.Server) *Provider {
-	config := DefaultConfig()
+	config := withDefaults[Config]()
 	config.APIKey, config.BaseURL = "test-key", server.URL+"/v1"
 	return New("openai", config, []alfred.ModelInfo{{
 		Ref: alfred.ModelRef{ModelID: "test-model"}, Capabilities: alfred.ModelCapabilities{Reasoning: true},

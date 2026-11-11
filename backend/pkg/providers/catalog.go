@@ -18,9 +18,9 @@ import (
 // CatalogConfig contains internal loader settings, not a public TOML schema.
 // CacheFile must be supplied by the application under its data directory.
 type CatalogConfig struct {
-	URL       string
+	URL       string `default:"https://models.dev/api.json"`
 	CacheFile string
-	MaxAge    time.Duration
+	MaxAge    time.Duration `default:"24h"`
 }
 
 // CatalogSource loads current model metadata using the shared catalog cache.
@@ -42,11 +42,6 @@ func (source *CatalogSource) Models(ctx context.Context, provider alfred.Provide
 		return nil, errors.B.Op(op).Err(err).Build()
 	}
 	return catalog.Models(provider), nil
-}
-
-// DefaultCatalogConfig supplies the public source and a daily refresh interval.
-func DefaultCatalogConfig() CatalogConfig {
-	return CatalogConfig{URL: "https://models.dev/api.json", MaxAge: 24 * time.Hour}
 }
 
 // Catalog is a snapshot of provider-specific model metadata. Catalog membership

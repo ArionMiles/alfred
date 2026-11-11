@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/creasty/defaults"
+
 	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
@@ -79,7 +81,10 @@ func (resolver *Resolver) ResolveProvider(ctx context.Context, id alfred.Provide
 			return nil, errors.B.Op(op).KindFailedPrecondition().Retryable(true).
 				UserMsg("This OpenAI connection cannot renew access. Reconnect it in Providers.").Build()
 		}
-		config := DefaultConfig()
+		var config Config
+		if err := defaults.Set(&config); err != nil {
+			return nil, errors.B.Op(op).Text("initialize OpenAI configuration").Err(err).Build()
+		}
 		if len(instance.Settings) != 0 {
 			return nil, errors.B.Op(op).KindFailedPrecondition().Retryable(true).
 				UserMsg("OpenAI subscription settings are unsupported. Reconnect the provider.").Build()
@@ -128,7 +133,10 @@ func (resolver *Resolver) openAICredential(
 func (resolver *Resolver) openAPIKeyConfig(instance alfred.ProviderInstance, data []byte) (Config, error) {
 	const op = "openAPIKeyConfig"
 
-	config := DefaultConfig()
+	var config Config
+	if err := defaults.Set(&config); err != nil {
+		return Config{}, errors.B.Op(op).Text("initialize OpenAI configuration").Err(err).Build()
+	}
 	for key := range instance.Settings {
 		if key != "base_url" {
 			return Config{}, errors.B.Op(op).KindFailedPrecondition().Retryable(true).

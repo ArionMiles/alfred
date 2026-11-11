@@ -211,6 +211,8 @@ github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6p
 github.com/coreos/go-oidc/v3 v3.21.0 h1:wZo4Q9Pum8dYEj0eMUPrqR+kvuGkeUplbLpNCkBqoWM=
 github.com/coreos/go-oidc/v3 v3.21.0/go.mod h1:DYCf24+ncYi+XkIH97GY1+dqoRlbaSI26KVTCI9SrY4=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
+github.com/creasty/defaults v1.11.0 h1:lZ8c5bHZGtyIeumdTPXKOKkHtNL+qQWVrGhNPGqeFww=
+github.com/creasty/defaults v1.11.0/go.mod h1:TGHvg4OCP/fVv+yotLzg97i5PKrF+iZSvg6Kmm7Y12Y=
 github.com/curioswitch/go-reassign v0.3.0 h1:dh3kpQHuADL3cobV/sSGETA8DOv457dwl+fbBAhrQPs=
 github.com/curioswitch/go-reassign v0.3.0/go.mod h1:nApPCCTtqLJN/s8HfItCcKV0jIPwluBOvZP+dsJGA88=
 github.com/daixiang0/gci v0.14.0 h1:h6AcLqmjIOBgojhtzY2CvBnA6RawPTkBHgtMvYD5YZ8=
@@ -462,6 +464,8 @@ github.com/knadh/koanf/maps v0.1.2 h1:RBfmAW5CnZT+PJ1CVc1QSJKf4Xu9kxfQgYVQSu8hpb
 github.com/knadh/koanf/maps v0.1.2/go.mod h1:npD/QZY3V6ghQDdcQzl1W4ICNVTkohC8E73eI2xW4yI=
 github.com/knadh/koanf/parsers/toml/v2 v2.2.2 h1:wbGxbgzNMsdEpnybeSPpI8sZixARaEr4+sLW+j+/hLM=
 github.com/knadh/koanf/parsers/toml/v2 v2.2.2/go.mod h1:JMyUfTKxpuou5VgLw/RXvKXMixIKEwJXALZon+pt0pg=
+github.com/knadh/koanf/providers/env/v2 v2.0.2 h1:nLZ4Ct/i7kXX2Ne8tkwEVThI0HxO6Psu51tCCfwLfho=
+github.com/knadh/koanf/providers/env/v2 v2.0.2/go.mod h1:1g01PE+Ve1gBfWNNw2wmULRP0tc8RJrjn5p2N/jNCIc=
 github.com/knadh/koanf/providers/rawbytes v1.0.1 h1:JCQoly+djX23Okr8kqtS19R7UXKleTAp62Vib2VrVYs=
 github.com/knadh/koanf/providers/rawbytes v1.0.1/go.mod h1:KxwYJf1uezTKy6PBtfE+m725NGp4GPVA7XoNTJ/PtLo=
 github.com/knadh/koanf/v2 v2.4.1 h1:MK2JDkLy4UGzEUkW1CCCKQftd9+M+NX8hAZ2axbf/jo=

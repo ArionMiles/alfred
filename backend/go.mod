@@ -20,12 +20,14 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	connectrpc.com/connect/v2 v2.0.2
 	github.com/coreos/go-oidc/v3 v3.21.0
+	github.com/creasty/defaults v1.11.0
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gofrs/flock v0.13.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
 	github.com/google/uuid v1.6.0
 	github.com/knadh/koanf/parsers/toml/v2 v2.2.2
+	github.com/knadh/koanf/providers/env/v2 v2.0.2
 	github.com/knadh/koanf/providers/rawbytes v1.0.1
 	github.com/knadh/koanf/v2 v2.4.1
 	github.com/openai/openai-go/v3 v3.96.0

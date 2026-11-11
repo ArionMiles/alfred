@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/creasty/defaults"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 
@@ -161,7 +162,8 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
 			t.Fatal(err)
 		}
 	}
-	catalog := providers.DefaultCatalogConfig()
+	var catalog providers.CatalogConfig
+	defaults.MustSet(&catalog)
 	catalog.URL, catalog.CacheFile = source.URL+"/catalog", filepath.Join(t.TempDir(), "models.dev.json")
 	registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(openai.NewResolver(
 		store, store, nil, providers.NewCatalogSource(catalog, source.Client()), source.Client(),

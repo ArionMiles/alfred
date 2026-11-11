@@ -28,7 +28,7 @@ type Resolver struct {
 type Config struct {
 	UserHome   string
 	ConfigHome string
-	SystemRoot string
+	SystemRoot string `default:"/etc/alfred/skills"`
 }
 
 type skillSet struct {

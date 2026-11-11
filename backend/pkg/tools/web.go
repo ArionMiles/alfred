@@ -20,7 +20,7 @@ const exaName = "exa"
 
 // WebSearchConfig chooses the default among registered search providers.
 type WebSearchConfig struct {
-	Provider string `koanf:"provider"`
+	Provider string `koanf:"provider" default:"exa"`
 }
 
 // SearchResult is a provider-independent web search hit.

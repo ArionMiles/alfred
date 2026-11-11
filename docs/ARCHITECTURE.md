@@ -29,6 +29,22 @@ that observes multiple moments, such as streaming measurements and network token
 renewal, reads current time at each observation rather than reusing an earlier
 timestamp for the whole operation.
 
+Application startup resolves one aggregate configuration before composition.
+Static defaults live on the owning settings structs and are applied before
+file values and explicitly named environment overrides. Loading resolves the
+application's configuration and data directories; composition derives database,
+history, catalog, and skill paths when constructing their components. The
+aggregate does not retain copies of those derived paths. Configuration types own
+their validation rules;
+application loading calls their `Valid` methods before path normalization can
+hide invalid input. Constructors receive concrete settings without reading
+process configuration, so SDK users can validate and compose them independently.
+
+The aggregate is not the public file schema: internal tuning and integration
+endpoints remain constructor settings. Environment exposure is explicit rather
+than inferred from every field. Persisted provider connections and credentials
+retain their own runtime workflows and do not join the startup source precedence.
+
 ## Execution belongs to the service
 
 A conversation should survive closing a terminal or reconnecting through a

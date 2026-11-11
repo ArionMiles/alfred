@@ -26,7 +26,7 @@ var migrationFiles embed.FS
 // Config contains runtime configuration for Store.
 type Config struct {
 	Path        string
-	BusyTimeout time.Duration
+	BusyTimeout time.Duration `default:"5s"`
 }
 
 // Store persists Alfred's mutable state.

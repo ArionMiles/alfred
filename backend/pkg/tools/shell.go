@@ -23,9 +23,6 @@ type ShellConfig struct {
 	RCFile string `koanf:"rc_file"`
 }
 
-// DefaultConfig supplies tool settings without requiring a configuration file.
-func DefaultConfig() Config { return Config{WebSearch: WebSearchConfig{Provider: exaName}} }
-
 // NewShell starts a fresh zsh with an explicit environment for each invocation.
 func NewShell(config ShellConfig, home string) alfred.Tool {
 	return define("shell", "Shell", "Run a command in a fresh non-interactive zsh, starting in the project directory. "+

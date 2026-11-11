@@ -21,15 +21,6 @@ const (
 	lockFileName = "service.lock"
 )
 
-// Config contains runtime configuration for local daemon ownership.
-type Config struct {
-	DataDir           string
-	ListenAddress     string
-	ReadHeaderTimeout time.Duration
-	ShutdownTimeout   time.Duration
-	StartupTimeout    time.Duration
-}
-
 // Discovery identifies the daemon currently serving one Alfred data directory.
 type Discovery struct {
 	SchemaVersion uint32    `json:"schema_version"`

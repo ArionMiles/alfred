@@ -103,7 +103,7 @@ func TestPaletteTrustActionUsesExistingRPC(t *testing.T) {
 
 func TestPaletteReceivesConfiguredShortcut(t *testing.T) {
 	t.Parallel()
-	config := DefaultConfig()
+	config := withDefaults[Config]()
 	config.Keybindings.Palette = []string{"ctrl+o"}
 	model := NewModel(t.Context(), config, rpc.Clients{}, "")
 	model.project, model.projectSkills, model.inspectedSkills = readyModel(t).project, &alfredv1.InspectProjectSkillsResponse{}, true

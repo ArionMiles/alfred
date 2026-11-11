@@ -46,7 +46,7 @@ func TestModelsUseCallerMetadata(t *testing.T) {
 		{Ref: alfred.ModelRef{ModelID: "z"}, Name: "Z", Capabilities: alfred.ModelCapabilities{InputModalities: []alfred.ContentKind{alfred.ContentKindText}}},
 		{Ref: alfred.ModelRef{ModelID: "a"}, Name: "A"},
 	}
-	provider := New("native", DefaultConfig(), models, http.DefaultClient)
+	provider := New("native", withDefaults[Config](), models, http.DefaultClient)
 	models[0].Capabilities.InputModalities[0] = alfred.ContentKindImage
 	listed, err := provider.Models(t.Context())
 	if err != nil || len(listed) != 2 || listed[0].Ref.ModelID != "a" || listed[1].Ref.ProviderID != "native" || provider.ID() != "native" {

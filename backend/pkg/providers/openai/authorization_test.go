@@ -196,7 +196,7 @@ func TestAuthorizationRetainsIdentityWithoutDirectTokenScope(t *testing.T) {
 	if result.Instance == nil || result.Instance.CredentialRef == "" {
 		t.Fatalf("completed result = %#v", result)
 	}
-	config := openai.DefaultAuthorizationConfig()
+	config := withDefaults[openai.AuthorizationConfig]()
 	config.Issuer = fixture.server.URL
 	config.TokenURL = fixture.server.URL + "/token"
 	manager := openai.NewSubscriptionCredentials(store, config, fixture.server.Client())
@@ -450,7 +450,7 @@ func TestReauthorizationReusesRegistrationAndPreservesConnectionOnFailure(t *tes
 				if after.CredentialRef == before.CredentialRef {
 					t.Fatal("reauthorization did not save fresh credentials")
 				}
-				manager := openai.NewSubscriptionCredentials(store, openai.DefaultAuthorizationConfig(), fixture.server.Client())
+				manager := openai.NewSubscriptionCredentials(store, withDefaults[openai.AuthorizationConfig](), fixture.server.Client())
 				if _, err := manager.AccessToken(t.Context(), after.CredentialRef); err != nil {
 					t.Fatal(err)
 				}
@@ -648,7 +648,7 @@ func getAuthorizationURL(t *testing.T, address string) (*http.Response, error) {
 
 func newAuthorizationService(t *testing.T, fixture *oauthFixture, store *sqlite.Store, options ...openai.AuthorizationOption) *openai.AuthorizationService {
 	t.Helper()
-	config := openai.DefaultAuthorizationConfig()
+	config := withDefaults[openai.AuthorizationConfig]()
 	config.Issuer = fixture.server.URL
 	config.AuthorizeURL = fixture.server.URL + "/authorize"
 	config.TokenURL = fixture.server.URL + "/token"

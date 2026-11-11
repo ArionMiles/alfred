@@ -44,22 +44,11 @@ var authorizationScopes = []string{
 
 // AuthorizationConfig contains OpenAI's public authorization endpoints.
 type AuthorizationConfig struct {
-	Issuer       string
-	AuthorizeURL string
-	TokenURL     string
-	Resource     string
-	CallbackPath string
-}
-
-// DefaultAuthorizationConfig returns the public Sign in with ChatGPT endpoints.
-func DefaultAuthorizationConfig() AuthorizationConfig {
-	return AuthorizationConfig{
-		Issuer:       "https://auth.openai.com",
-		AuthorizeURL: "https://auth.openai.com/api/accounts/authorize",
-		TokenURL:     "https://auth.openai.com/api/accounts/oauth/token",
-		Resource:     "https://api.openai.com/v1",
-		CallbackPath: "/auth/callback",
-	}
+	Issuer       string `default:"https://auth.openai.com"`
+	AuthorizeURL string `default:"https://auth.openai.com/api/accounts/authorize"`
+	TokenURL     string `default:"https://auth.openai.com/api/accounts/oauth/token"`
+	Resource     string `default:"https://api.openai.com/v1"`
+	CallbackPath string `default:"/auth/callback"`
 }
 
 type authorizationStore interface {

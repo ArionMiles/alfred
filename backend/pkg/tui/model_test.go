@@ -45,7 +45,7 @@ func TestModelResolvesProjectThroughRPC(t *testing.T) {
 		),
 	)
 	clients := rpc.NewClients(connect.NewClient(connectinprocess.New(connectServer)))
-	model := NewModel(t.Context(), DefaultConfig(), clients, project.Root)
+	model := NewModel(t.Context(), withDefaults[Config](), clients, project.Root)
 
 	message := model.Init()()
 	updated, command := model.Update(message)
@@ -167,7 +167,7 @@ func TestMessageSubmissionCreatesAndReusesSession(t *testing.T) {
 	)
 	server := connect.NewServer()
 	alfredv1connect.RegisterInvocationServiceHandler(server, rpc.NewInvocationHandler(invocations))
-	config := DefaultConfig()
+	config := withDefaults[Config]()
 	config.Keybindings.Submit = []string{"ctrl+s"}
 	model := NewModel(
 		t.Context(), config,
@@ -220,7 +220,7 @@ func TestFailedMessageSubmissionRetainsInput(t *testing.T) {
 	server := connect.NewServer()
 	alfredv1connect.RegisterInvocationServiceHandler(server, rpc.NewInvocationHandler(invocations))
 	model := NewModel(
-		t.Context(), DefaultConfig(),
+		t.Context(), withDefaults[Config](),
 		rpc.NewClients(connect.NewClient(connectinprocess.New(server))),
 		"",
 	)
@@ -304,7 +304,7 @@ func TestSessionReconnectUsesLastDurableSequence(t *testing.T) {
 	t.Parallel()
 
 	sessions := &recordingSessionClient{}
-	model := NewModel(t.Context(), DefaultConfig(), rpc.Clients{Session: sessions}, "")
+	model := NewModel(t.Context(), withDefaults[Config](), rpc.Clients{Session: sessions}, "")
 	model.sessionID = "session-1"
 	model.lastSequence = 7
 	model.watchGeneration = 4
@@ -330,7 +330,7 @@ func TestStaleSessionWatchIsCancelledAfterReplacement(t *testing.T) {
 
 	cancelled := false
 	stale := &sessionWatch{cancel: func() { cancelled = true }, generation: 2}
-	model := NewModel(t.Context(), DefaultConfig(), rpc.Clients{}, "")
+	model := NewModel(t.Context(), withDefaults[Config](), rpc.Clients{}, "")
 	model.sessionID = "session-2"
 	model.watchGeneration = 3
 
@@ -349,7 +349,7 @@ func TestReplacingSessionCancelsWatchAndResetsReplayState(t *testing.T) {
 	t.Parallel()
 
 	cancelled := false
-	model := NewModel(t.Context(), DefaultConfig(), rpc.Clients{}, "")
+	model := NewModel(t.Context(), withDefaults[Config](), rpc.Clients{}, "")
 	model.sessionID = "session-1"
 	model.lastSequence = 9
 	model.watchGeneration = 2
@@ -377,7 +377,7 @@ func TestSessionWatchFailureDisconnectsAndSchedulesReconnect(t *testing.T) {
 	t.Parallel()
 
 	cancelled := false
-	model := NewModel(t.Context(), DefaultConfig(), rpc.Clients{}, "")
+	model := NewModel(t.Context(), withDefaults[Config](), rpc.Clients{}, "")
 	model.sessionID = "session-1"
 	model.watchGeneration = 2
 	model.watchState = sessionWatchConnected
@@ -503,7 +503,7 @@ func TestProgramStatusFollowsRunLifecycle(t *testing.T) {
 func TestEnterCompletesSlashCommandBeforeExecutingIt(t *testing.T) {
 	t.Parallel()
 
-	model := NewModel(t.Context(), DefaultConfig(), rpc.Clients{}, "")
+	model := NewModel(t.Context(), withDefaults[Config](), rpc.Clients{}, "")
 	model.composer.SetValue("/")
 
 	updated, command := model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -570,7 +570,7 @@ func TestQuitCommandExits(t *testing.T) {
 	t.Parallel()
 
 	for _, name := range []string{"/quit", "/exit"} {
-		model := NewModel(t.Context(), DefaultConfig(), rpc.Clients{}, "")
+		model := NewModel(t.Context(), withDefaults[Config](), rpc.Clients{}, "")
 		model.composer.SetValue(name)
 		_, command := model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 		if command == nil {
@@ -585,7 +585,7 @@ func TestQuitCommandExits(t *testing.T) {
 func TestInterruptDoesNotExitWithoutActiveRun(t *testing.T) {
 	t.Parallel()
 
-	model := NewModel(t.Context(), DefaultConfig(), rpc.Clients{}, "")
+	model := NewModel(t.Context(), withDefaults[Config](), rpc.Clients{}, "")
 	_, command := model.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if command != nil {
 		t.Fatalf("interrupt command = %T, want no command", command())
@@ -603,7 +603,7 @@ func TestInterruptCancelsActiveRunThroughRPC(t *testing.T) {
 		server,
 		rpc.NewRunHandler(mocks.NewMockRunStore(controller), control),
 	)
-	config := DefaultConfig()
+	config := withDefaults[Config]()
 	config.Keybindings.Interrupt = []string{"ctrl+x"}
 	model := NewModel(
 		t.Context(), config,
@@ -661,7 +661,7 @@ func TestTerminalRunCannotBeCancelled(t *testing.T) {
 		alfredv1.RunStatus_RUN_STATUS_FAILED,
 		alfredv1.RunStatus_RUN_STATUS_CANCELLED,
 	} {
-		model := NewModel(t.Context(), DefaultConfig(), rpc.Clients{}, "")
+		model := NewModel(t.Context(), withDefaults[Config](), rpc.Clients{}, "")
 		model.activeRun = &alfredv1.Run{Id: "run-1", Status: status}
 		updated, command := model.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 		if command != nil || updated.(Model).canceling {
@@ -824,12 +824,12 @@ func newTestModel(
 		rpc.NewProjectHandler(resolver, inspector, projects),
 	)
 	clients := rpc.NewClients(connect.NewClient(connectinprocess.New(connectServer)))
-	return NewModel(t.Context(), DefaultConfig(), clients, root)
+	return NewModel(t.Context(), withDefaults[Config](), clients, root)
 }
 
 func readyModel(t *testing.T) Model {
 	t.Helper()
-	model := NewModel(t.Context(), DefaultConfig(), rpc.Clients{}, "")
+	model := NewModel(t.Context(), withDefaults[Config](), rpc.Clients{}, "")
 	model.project = &alfredv1.Project{
 		Id: "project-1", Name: "alfred", Root: "/work/alfred",
 		SkillTrust: alfredv1.ProjectSkillTrust_PROJECT_SKILL_TRUST_DENIED,
@@ -879,7 +879,7 @@ func (client *recordingSessionClient) WatchSession(
 
 func TestApprovalHintUsesConfiguredInterrupt(t *testing.T) {
 	t.Parallel()
-	config := DefaultConfig()
+	config := withDefaults[Config]()
 	config.Keybindings.Interrupt = []string{"ctrl+x", "esc"}
 	model := NewModel(t.Context(), config, rpc.Clients{}, "")
 	model.gates.apply(approvalRequestedEvent(1, "run-1", "approval-1", "Allow action?"))

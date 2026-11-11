@@ -27,7 +27,7 @@ func TestSubscriptionCredentialsReturnsCurrentAccessToken(t *testing.T) {
 		AccessToken: "current-access", RefreshToken: "current-refresh", Scopes: []string{requiredDirectScope},
 		ExpiresAt: now.Add(time.Hour).Unix(),
 	})
-	manager := NewSubscriptionCredentials(store, DefaultAuthorizationConfig(), http.DefaultClient)
+	manager := NewSubscriptionCredentials(store, withDefaults[AuthorizationConfig](), http.DefaultClient)
 	token, err := manager.AccessToken(t.Context(), ref)
 	if err != nil || token != "current-access" {
 		t.Fatalf("AccessToken() = %q, %v", token, err)
@@ -95,7 +95,7 @@ func TestSubscriptionCredentialsSerializesRotatingRefresh(t *testing.T) {
 		})
 	}))
 	t.Cleanup(server.Close)
-	config := DefaultAuthorizationConfig()
+	config := withDefaults[AuthorizationConfig]()
 	config.TokenURL = server.URL
 	manager := NewSubscriptionCredentials(store, config, server.Client())
 
@@ -144,7 +144,7 @@ func TestSubscriptionCredentialsClearsInvalidRotatingTokens(t *testing.T) {
 		_, _ = writer.Write([]byte(`{"error":"invalid_grant"}`))
 	}))
 	t.Cleanup(server.Close)
-	config := DefaultAuthorizationConfig()
+	config := withDefaults[AuthorizationConfig]()
 	config.TokenURL = server.URL
 	manager := NewSubscriptionCredentials(store, config, server.Client())
 	if _, err := manager.AccessToken(t.Context(), ref); errors.WhatKind(err) != errors.Unauthenticated {
@@ -169,7 +169,7 @@ func TestSubscriptionCredentialsPreservesTokensAfterTransientFailure(t *testing.
 		writer.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	t.Cleanup(server.Close)
-	config := DefaultAuthorizationConfig()
+	config := withDefaults[AuthorizationConfig]()
 	config.TokenURL = server.URL
 	manager := NewSubscriptionCredentials(store, config, server.Client())
 	if _, err := manager.AccessToken(t.Context(), ref); errors.WhatKind(err) != errors.Unavailable || !errors.IsRetryable(err) {
@@ -205,7 +205,7 @@ func TestSubscriptionCredentialsReusesRotatedTokenAfterDatabaseRestart(t *testin
 		})
 	}))
 	t.Cleanup(server.Close)
-	authConfig := DefaultAuthorizationConfig()
+	authConfig := withDefaults[AuthorizationConfig]()
 	authConfig.TokenURL = server.URL
 	manager := NewSubscriptionCredentials(store, authConfig, server.Client())
 	if _, err := manager.AccessToken(t.Context(), ref); err != nil {
@@ -254,7 +254,7 @@ func TestSubscriptionCredentialsDoesNotReturnTokenAfterScopeLoss(t *testing.T) {
 		})
 	}))
 	t.Cleanup(server.Close)
-	config := DefaultAuthorizationConfig()
+	config := withDefaults[AuthorizationConfig]()
 	config.TokenURL = server.URL
 	manager := NewSubscriptionCredentials(store, config, server.Client())
 	token, err := manager.AccessToken(t.Context(), ref)
@@ -280,7 +280,7 @@ func TestSubscriptionCredentialsPersistsRotationWhenRequestIsCanceled(t *testing
 		})
 	}))
 	t.Cleanup(server.Close)
-	config := DefaultAuthorizationConfig()
+	config := withDefaults[AuthorizationConfig]()
 	config.TokenURL = server.URL
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

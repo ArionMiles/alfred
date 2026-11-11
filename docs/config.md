@@ -21,7 +21,8 @@ Linux and macOS use the same locations:
 When XDG_CONFIG_HOME is unset or empty, the base is `~/.config`. XDG paths must
 be absolute. Missing default files use defaults; existing invalid or unreadable
 files produce errors. Unknown TOML settings and incorrect value types are
-rejected.
+rejected. Startup loads and validates both files, including when running
+`alfred serve`.
 
 Set ALFRED_CONFIG_FILE to select a different server file:
 
@@ -144,9 +145,28 @@ require restarting the service.
 
 ## Environment variables
 
-ALFRED_CONFIG_FILE selects the server file. XDG_CONFIG_HOME and XDG_DATA_HOME
-select the configuration and data bases. Individual settings have no environment
-overrides. Enter provider and search secrets through their TUI setup flows.
+Precedence is environment overrides, then file values, then defaults. Only the
+following settings have environment overrides:
+
+| Variable | File setting |
+| --- | --- |
+| `ALFRED_DATA_DIR` | `data_dir` |
+| `ALFRED_LISTEN_ADDRESS` | `listen_address` |
+| `ALFRED_TOOLS_SHELL_RC_FILE` | `tools.shell.rc_file` |
+| `ALFRED_TOOLS_WEB_SEARCH_PROVIDER` | `tools.web_search.provider` |
+| `ALFRED_TUI_KEYBINDINGS_SUBMIT` | Client `keybindings.submit` |
+| `ALFRED_TUI_KEYBINDINGS_INTERRUPT` | Client `keybindings.interrupt` |
+| `ALFRED_TUI_KEYBINDINGS_PALETTE` | Client `keybindings.palette` |
+
+Keybinding overrides are comma-separated key names, for example
+`ALFRED_TUI_KEYBINDINGS_SUBMIT=enter,ctrl+s`. A set but empty override is an
+explicit empty value; validation still applies. Relative path overrides resolve
+beside the selected server file, just like TOML paths. Use absolute paths when
+launching the client and service from different directories.
+
+`ALFRED_CONFIG_FILE` selects the server file. `XDG_CONFIG_HOME` and `XDG_DATA_HOME`
+select the configuration and data bases. Enter provider and search secrets
+through their TUI setup flows.
 
 ## Troubleshooting
 

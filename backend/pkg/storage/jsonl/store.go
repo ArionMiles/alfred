@@ -29,7 +29,7 @@ type sessionReader interface {
 type Config struct {
 	DataDir string
 	// LockShardCount bounds the in-process locks shared among sessions.
-	LockShardCount int
+	LockShardCount int `default:"64"`
 }
 
 // Store appends and reads the authoritative JSONL history for each session.

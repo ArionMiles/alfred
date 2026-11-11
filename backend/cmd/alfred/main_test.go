@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/creasty/defaults"
+
 	"github.com/ArionMiles/alfred/internal/config"
 	"github.com/ArionMiles/alfred/pkg/daemon"
-	"github.com/ArionMiles/alfred/pkg/tools"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
@@ -28,10 +29,12 @@ func TestComposeReleasesResourcesOnFailure(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			settings := config.Server{
-				DataDir: t.TempDir(), ConfigDir: t.TempDir(),
-				ListenAddress: "invalid", Tools: tools.DefaultConfig(),
-			}
+			var settings config.C
+			defaults.MustSet(&settings)
+			settings.DataDir = t.TempDir()
+			settings.ConfigDir = t.TempDir()
+			settings.Daemon.ListenAddress = "invalid"
+
 			databasePath := filepath.Join(settings.DataDir, "alfred.db")
 			if test.blockDatabase {
 				if err := os.Mkdir(databasePath, 0o700); err != nil {
@@ -59,7 +62,7 @@ func TestComposeReleasesResourcesOnFailure(t *testing.T) {
 				}
 			}
 
-			owner, err := daemon.Acquire(daemonConfig(settings))
+			owner, err := daemon.Acquire(daemon.Config{DataDir: settings.DataDir})
 			if err != nil {
 				t.Fatalf("failed composition retained daemon ownership: %v", err)
 			}
@@ -90,10 +93,12 @@ func TestComposeReleasesResourcesOnFailure(t *testing.T) {
 
 func TestComposeTransfersResourcesToApplication(t *testing.T) {
 	t.Parallel()
-	settings := config.Server{
-		DataDir: t.TempDir(), ConfigDir: t.TempDir(),
-		ListenAddress: "127.0.0.1:0", Tools: tools.DefaultConfig(),
-	}
+	var settings config.C
+	defaults.MustSet(&settings)
+	settings.DataDir = t.TempDir()
+	settings.ConfigDir = t.TempDir()
+	settings.Daemon.ListenAddress = "127.0.0.1:0"
+
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	app, err := compose(ctx, settings)
@@ -109,7 +114,7 @@ func TestComposeTransfersResourcesToApplication(t *testing.T) {
 	if _, err := app.store.GetKeyValue(t.Context(), "test/missing"); errors.WhatKind(err) != errors.NotFound {
 		t.Fatalf("successful composition closed its store: %v", err)
 	}
-	owner, err := daemon.Acquire(daemonConfig(settings))
+	owner, err := daemon.Acquire(daemon.Config{DataDir: settings.DataDir})
 	if err == nil {
 		if closeErr := owner.Close(); closeErr != nil {
 			t.Error(closeErr)

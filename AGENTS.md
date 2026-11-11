@@ -98,30 +98,38 @@ the first client; web and native iOS clients will follow. Read
   after construction. Keep temporary configuration in constructors.
 - Pass dependencies directly to constructors. Introduce a `Dependencies` struct
   only when the configured argument-limit lint rule requires it.
-- Treat configuration validation and defaulting as application responsibilities.
+- Configuration types own their validation rules through `Valid() error` methods.
+  Application loading applies defaults and overrides, then calls those methods.
   Core constructors state what configuration they expect and may assume the
   composition root supplies it; do not duplicate required-value checks or
-  defaults defensively in the core. Continue to validate domain inputs and
+  defaults defensively in constructors. Continue to validate domain inputs and
   data crossing runtime or persistence trust boundaries where correctness or
   safety requires it.
 - Keep constructor settings in focused package-level `Config` structs and
   runtime collaborators in separate `Dependencies` structs. Constructor settings
   are internal inputs, not automatically the public file schema. The approved
-  TOML decoder uses koanf tags on file-facing types; defaults are ordinary Go
-  functions owned by the relevant module. Do not reintroduce default-value tags.
+  TOML decoder uses koanf tags on file-facing types. Static defaults belong in
+  `default` tags on the owning configuration structs and are applied before
+  file and environment overrides. Resolve public path settings in application
+  configuration and derive component paths in composition; do not default
+  defensively in core constructors.
   Do not introduce an empty `Config` for a package that needs no settings.
-- Keep file discovery and decoding in `internal/config`. The TUI owns client
-  types, defaults, and validation; the config package must not import it.
-  Server settings/defaults belong to `internal/config`. Apply saved theme
-  overrides within the TUI; the config package must not access the database.
-  File values are explicit, with
-  no environment references. Only the server file path uses
-  `ALFRED_CONFIG_FILE`; do not add a client configuration-path variable.
+- Keep file discovery, decoding, and startup resolution in `internal/config`.
+  Its `C` struct composes settings and static defaults; `Load` applies defaults,
+  files, and explicitly supported environment overrides and validates the result.
+  Derive component paths in `main.go` rather than populating duplicate paths in
+  the aggregate. Omit path-only component configs from `C`.
+  The TUI owns its configuration types, default tags, and validation. Apply saved
+  theme overrides within the TUI; the config package must not access the database.
+  File values are literal, with no environment references. `ALFRED_CONFIG_FILE`
+  selects the server file; do not add a client configuration-path variable.
+  Adding a constructor field must not automatically expose a file or environment
+  setting. Provider credentials and saved provider settings remain separate.
 - Use XDG_CONFIG_HOME and XDG_DATA_HOME on both Linux and macOS, falling back
   to ~/.config and ~/.local/share. The public server setting is data_dir;
-  do not reintroduce ALFRED_DATA_DIR.
-- Resolve ConfigDir once in server defaults and reuse it for client loading and
-  skill discovery. It is derived startup state, excluded from TOML decoding.
+  ALFRED_DATA_DIR is its explicit environment override.
+- Resolve ConfigDir once in application configuration and reuse it for client
+  loading and skill discovery. It is derived startup state, excluded from TOML decoding.
 - Do not introduce indirection merely to make a pattern possible. If a wrapper
   makes a type appear to contain or delegate to itself, reconsider the layer.
 - Before adding any mutex, lock, semaphore, singleflight mechanism, or equivalent

@@ -127,17 +127,24 @@ for the provider's recovery rules.
 
 Applications composing the Go SDK can customize authorization presentation:
 
+Initialize the public endpoint defaults with `github.com/creasty/defaults`
+before applying any application-specific overrides:
+
 ```go
+var settings openai.AuthorizationConfig
+if err := defaults.Set(&settings); err != nil {
+    return err
+}
 authorization := openai.NewAuthorizationService(
-    ctx, openai.DefaultAuthorizationConfig(), dependencies,
+    ctx, settings, dependencies,
     openai.WithAgentName("My Agent"),
     openai.WithSuccessHTML("<!doctype html><title>Connected</title><h1>Ready</h1>"),
 )
 defer authorization.Close()
 ```
 
-`dependencies` supplies the application's stores, identity generators, clock, and
-HTTP client. These are constructor options, not server TOML or TUI settings.
+`dependencies` supplies the application's stores, identity generators, and HTTP
+client. These are constructor options, not server TOML or TUI settings.
 The agent name is used for first registration and the bundled callback page;
 it does not rename a registration already issued by OpenAI. Custom success HTML
 is served verbatim only after credentials and plan permission have been validated

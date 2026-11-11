@@ -63,7 +63,7 @@ func run(ctx context.Context, arguments []string) error {
 	if len(arguments) > 1 || (len(arguments) == 1 && arguments[0] != "serve") {
 		return errors.B.Op(op).KindInvalidArgument().UserMsg("usage: alfred [serve]").Build()
 	}
-	settings, err := config.LoadServer()
+	settings, err := config.Load()
 	if err != nil {
 		return errors.B.Op(op).Err(err).Build()
 	}
@@ -79,7 +79,7 @@ func run(ctx context.Context, arguments []string) error {
 	return nil
 }
 
-func runService(ctx context.Context, settings config.Server) error {
+func runService(ctx context.Context, settings config.C) error {
 	const op = "runService"
 
 	app, err := compose(ctx, settings)
@@ -92,18 +92,12 @@ func runService(ctx context.Context, settings config.Server) error {
 	return nil
 }
 
-func runClient(ctx context.Context, settings config.Server) error {
+func runClient(ctx context.Context, settings config.C) error {
 	const op = "runClient"
 
-	clientConfig := tui.DefaultConfig()
-	if err := config.LoadClient(settings.ConfigDir, &clientConfig); err != nil {
-		return errors.B.Op(op).Err(err).Build()
-	}
-	if err := tui.ValidateConfig(clientConfig); err != nil {
-		return errors.B.Op(op).Text("validate client configuration").Err(err).Build()
-	}
-
-	discovery, err := daemon.Ensure(ctx, daemonConfig(settings), startServiceProcess)
+	daemonConfig := settings.Daemon
+	daemonConfig.DataDir = settings.DataDir
+	discovery, err := daemon.Ensure(ctx, daemonConfig, startServiceProcess)
 	if err != nil {
 		return errors.B.Op(op).Err(err).Build()
 	}
@@ -111,17 +105,18 @@ func runClient(ctx context.Context, settings config.Server) error {
 	if err != nil {
 		return errors.B.Op(op).Text("get current working directory").Err(err).Build()
 	}
-	if err := tui.Run(ctx, clientConfig, rpcClients(discovery.Endpoint), root); err != nil {
+	if err := tui.Run(ctx, settings.TUI, rpcClients(discovery.Endpoint), root); err != nil {
 		return errors.B.Op(op).Err(err).Build()
 	}
 	return nil
 }
 
-func compose(ctx context.Context, settings config.Server) (app *application, err error) {
+func compose(ctx context.Context, settings config.C) (app *application, err error) {
 	const op = "compose"
 
-	dataDir := settings.DataDir
-	owner, err := daemon.Acquire(daemonConfig(settings))
+	daemonConfig := settings.Daemon
+	daemonConfig.DataDir = settings.DataDir
+	owner, err := daemon.Acquire(daemonConfig)
 	if err != nil {
 		return nil, errors.B.Op(op).Text("acquire daemon ownership").Err(err).Build()
 	}
@@ -134,8 +129,8 @@ func compose(ctx context.Context, settings config.Server) (app *application, err
 		}
 	}()
 	store, err := sqlite.Open(ctx, sqlite.Config{
-		Path:        filepath.Join(dataDir, "alfred.db"),
-		BusyTimeout: 5 * time.Second,
+		Path:        filepath.Join(settings.DataDir, "alfred.db"),
+		BusyTimeout: settings.SQLite.BusyTimeout,
 	})
 	if err != nil {
 		return nil, errors.B.Op(op).Text("open SQLite store").Err(err).Build()
@@ -152,7 +147,7 @@ func compose(ctx context.Context, settings config.Server) (app *application, err
 
 	broker := events.NewBroker()
 	eventStore := jsonl.New(
-		jsonl.Config{DataDir: dataDir, LockShardCount: 64},
+		jsonl.Config{DataDir: settings.DataDir, LockShardCount: settings.History.LockShardCount},
 		store,
 		store,
 		identity.Generator[alfred.RunEventID]{},
@@ -162,6 +157,8 @@ func compose(ctx context.Context, settings config.Server) (app *application, err
 	if err != nil {
 		return nil, errors.B.Op(op).Text("resolve user home").Err(err).Build()
 	}
+	catalogConfig := settings.Catalog
+	catalogConfig.CacheFile = filepath.Join(settings.DataDir, "models.dev.json")
 	webClient := &http.Client{Timeout: 30 * time.Second}
 	searchTool, err := tools.NewWebSearch(settings.Tools.WebSearch, tools.NewExa("https://api.exa.ai/search", store, store, webClient))
 	if err != nil {
@@ -172,14 +169,12 @@ func compose(ctx context.Context, settings config.Server) (app *application, err
 	if err != nil {
 		return nil, errors.B.Op(op).Text("create tool registry").Err(err).Build()
 	}
-	catalogConfig := providers.DefaultCatalogConfig()
-	catalogConfig.CacheFile = filepath.Join(dataDir, "models.dev.json")
 	providerRegistry, err := providers.NewRegistry(
 		nil,
 		providers.WithConfiguredProviders(openaiAuthorization.NewResolver(
 			store, store,
 			openaiAuthorization.NewSubscriptionCredentials(
-				store, openaiAuthorization.DefaultAuthorizationConfig(), webClient,
+				store, settings.OpenAIAuthorization, webClient,
 			),
 			providers.NewCatalogSource(catalogConfig, &http.Client{Timeout: 15 * time.Second}),
 			http.DefaultClient,
@@ -192,7 +187,7 @@ func compose(ctx context.Context, settings config.Server) (app *application, err
 	skillResolver := skills.NewResolver(skills.Config{
 		UserHome:   userHome,
 		ConfigHome: filepath.Dir(settings.ConfigDir),
-		SystemRoot: "/etc/alfred/skills",
+		SystemRoot: settings.Skills.SystemRoot,
 	}, store)
 	runner := agent.NewRunner(agent.Dependencies{
 		Runs:                 store,
@@ -231,7 +226,7 @@ func compose(ctx context.Context, settings config.Server) (app *application, err
 	providerSubmitter := providers.NewSubmitter(providerSetup, store, identity.Generator[alfred.CredentialRef]{})
 	providerAuthorization := openaiAuthorization.NewAuthorizationService(
 		ctx,
-		openaiAuthorization.DefaultAuthorizationConfig(),
+		settings.OpenAIAuthorization,
 		openaiAuthorization.AuthorizationDependencies{
 			Store: store, Credentials: store, IDs: identity.Generator[alfred.ProviderAuthorizationID]{},
 			References: identity.Generator[alfred.CredentialRef]{}, HTTPClient: webClient,
@@ -254,7 +249,7 @@ func compose(ctx context.Context, settings config.Server) (app *application, err
 		ProviderSetup: rpc.NewProviderSetupHandler(providerSetup, providerSubmitter, store, providerAuthorization),
 		Models:        rpc.NewModelHandler(modelService),
 	})
-	server, err := daemon.NewServer(ctx, daemonConfig(settings), owner, handler, status)
+	server, err := daemon.NewServer(ctx, daemonConfig, owner, handler, status)
 	if err != nil {
 		return nil, errors.B.Op(op).Text("create daemon server").Err(err).Build()
 	}
@@ -271,16 +266,6 @@ func (app *application) Serve(ctx context.Context) error {
 		return errors.B.Op(op).Err(serveErr).Err(closeErr).Build()
 	}
 	return nil
-}
-
-func daemonConfig(settings config.Server) daemon.Config {
-	return daemon.Config{
-		DataDir:           settings.DataDir,
-		ListenAddress:     settings.ListenAddress,
-		ReadHeaderTimeout: 5 * time.Second,
-		ShutdownTimeout:   10 * time.Second,
-		StartupTimeout:    10 * time.Second,
-	}
 }
 
 func startServiceProcess() error {

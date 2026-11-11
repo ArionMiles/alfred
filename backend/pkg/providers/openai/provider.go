@@ -24,11 +24,8 @@ func nativeKey(kind string) string { return "openai.responses." + kind + ".v1" }
 // Config contains constructor settings, not a public file configuration schema.
 type Config struct {
 	APIKey  string
-	BaseURL string
+	BaseURL string `default:"https://api.openai.com/v1"`
 }
-
-// DefaultConfig supplies the native OpenAI endpoint. Credentials are explicit.
-func DefaultConfig() Config { return Config{BaseURL: "https://api.openai.com/v1"} }
 
 // Provider translates Alfred model requests to the Responses API.
 type Provider struct {

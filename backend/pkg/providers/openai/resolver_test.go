@@ -51,7 +51,7 @@ func TestConfiguredProviderUsesSavedSetupAndPicksUpChanges(t *testing.T) {
 		_, _ = fmt.Fprint(writer, "data: "+`{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Ready","annotations":[]}]}]}}`+"\n\n")
 	}))
 	t.Cleanup(server.Close)
-	catalog := providers.DefaultCatalogConfig()
+	catalog := withDefaults[providers.CatalogConfig]()
 	catalog.URL, catalog.CacheFile = server.URL+"/catalog", filepath.Join(t.TempDir(), "models.dev.json")
 	var decorated []string
 	layer := func(name string) providers.Middleware {
@@ -155,7 +155,7 @@ func TestConfiguredProviderRejectsUnusableSetupBeforeNetworkAccess(t *testing.T)
 			}
 			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("invalid setup reached the network") }))
 			t.Cleanup(server.Close)
-			catalog := providers.DefaultCatalogConfig()
+			catalog := withDefaults[providers.CatalogConfig]()
 			catalog.URL, catalog.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
 			registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(provideropenai.NewResolver(
 				store, store, nil, providers.NewCatalogSource(catalog, server.Client()), server.Client(),
@@ -198,7 +198,7 @@ func TestConfiguredProviderUsesSuppliedCredentialBackend(t *testing.T) {
 	}
 	credentials := mocks.NewMockCredentialReader(gomock.NewController(t))
 	credentials.EXPECT().GetCredential(gomock.Any(), instance.CredentialRef).Return([]byte(`{"version":1,"provider":"openai","method":"api-key","fields":{"api_key":"external-test-key"}}`), nil)
-	catalog := providers.DefaultCatalogConfig()
+	catalog := withDefaults[providers.CatalogConfig]()
 	catalog.URL, catalog.CacheFile = server.URL+"/catalog", filepath.Join(t.TempDir(), "models.dev.json")
 	registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(provideropenai.NewResolver(
 		store, credentials, nil, providers.NewCatalogSource(catalog, server.Client()), server.Client(),
@@ -247,11 +247,11 @@ func TestConfiguredProviderResolvesChatGPTSubscription(t *testing.T) {
 	if err := store.PutCredential(t.Context(), instance.CredentialRef, data); err != nil {
 		t.Fatal(err)
 	}
-	catalog := providers.DefaultCatalogConfig()
+	catalog := withDefaults[providers.CatalogConfig]()
 	catalog.URL, catalog.CacheFile = server.URL+"/catalog", filepath.Join(t.TempDir(), "models.dev.json")
 	registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(provideropenai.NewResolver(
 		store, store,
-		provideropenai.NewSubscriptionCredentials(store, provideropenai.DefaultAuthorizationConfig(), server.Client()),
+		provideropenai.NewSubscriptionCredentials(store, withDefaults[provideropenai.AuthorizationConfig](), server.Client()),
 		providers.NewCatalogSource(catalog, server.Client()), server.Client(),
 	)))
 	if err != nil {
@@ -287,11 +287,11 @@ func TestOpenAIResolverRequiresOpenAIModelMetadata(t *testing.T) {
 				_, _ = fmt.Fprint(writer, `{"other":{"models":{"other-model":{"name":"Other"}}}}`)
 			}))
 			t.Cleanup(server.Close)
-			catalog := providers.DefaultCatalogConfig()
+			catalog := withDefaults[providers.CatalogConfig]()
 			catalog.URL, catalog.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
 			resolver := provideropenai.NewResolver(
 				store, store,
-				provideropenai.NewSubscriptionCredentials(store, provideropenai.DefaultAuthorizationConfig(), server.Client()),
+				provideropenai.NewSubscriptionCredentials(store, withDefaults[provideropenai.AuthorizationConfig](), server.Client()),
 				providers.NewCatalogSource(catalog, server.Client()), server.Client(),
 			)
 			provider, err := resolver.ResolveProvider(t.Context(), instance.ID)

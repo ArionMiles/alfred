@@ -47,9 +47,9 @@ func TestSubscriptionProviderUsesAccountModelsAndNamespacedTools(t *testing.T) {
 		}
 	}))
 	t.Cleanup(server.Close)
-	config := DefaultConfig()
+	config := withDefaults[Config]()
 	config.BaseURL = server.URL + "/v1"
-	manager := NewSubscriptionCredentials(store, DefaultAuthorizationConfig(), server.Client())
+	manager := NewSubscriptionCredentials(store, withDefaults[AuthorizationConfig](), server.Client())
 	provider := NewSubscription("openai", config, []alfred.ModelInfo{
 		{Ref: alfred.ModelRef{ModelID: "test-model"}, Name: "Catalog test", Capabilities: alfred.ModelCapabilities{Reasoning: true}},
 		{Ref: alfred.ModelRef{ModelID: "second-model"}, Name: "Catalog second"},
@@ -228,12 +228,12 @@ func subscriptionTestProvider(t *testing.T, server *httptest.Server) *Provider {
 		AccessToken: "subscription-access", RefreshToken: "subscription-refresh", Scopes: []string{requiredDirectScope},
 		ExpiresAt: now.Add(time.Hour).Unix(),
 	})
-	config := DefaultConfig()
+	config := withDefaults[Config]()
 	config.BaseURL = server.URL + "/v1"
 	return NewSubscription("openai", config, []alfred.ModelInfo{{
 		Ref: alfred.ModelRef{ModelID: "test-model"}, Capabilities: alfred.ModelCapabilities{Reasoning: true},
 	}}, SubscriptionDependencies{
-		Credentials:   NewSubscriptionCredentials(store, DefaultAuthorizationConfig(), server.Client()),
+		Credentials:   NewSubscriptionCredentials(store, withDefaults[AuthorizationConfig](), server.Client()),
 		CredentialRef: ref, HTTPClient: server.Client(),
 	})
 }

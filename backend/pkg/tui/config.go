@@ -14,26 +14,14 @@ type Config struct {
 
 // KeybindingsConfig maps client actions to terminal key names.
 type KeybindingsConfig struct {
-	Submit    []string `koanf:"submit"`
-	Interrupt []string `koanf:"interrupt"`
-	Palette   []string `koanf:"palette"`
+	Submit    []string `koanf:"submit" default:"[\"enter\"]"`
+	Interrupt []string `koanf:"interrupt" default:"[\"ctrl+c\"]"`
+	Palette   []string `koanf:"palette" default:"[\"ctrl+p\"]"`
 }
 
-// DefaultConfig supplies client settings when no file overrides are present.
-func DefaultConfig() Config {
-	return Config{Keybindings: DefaultKeybindingsConfig()}
-}
-
-// DefaultKeybindingsConfig returns a fresh set of the client's default keys.
-func DefaultKeybindingsConfig() KeybindingsConfig {
-	return KeybindingsConfig{
-		Submit: []string{enterKey}, Interrupt: []string{"ctrl+c"}, Palette: []string{"ctrl+p"},
-	}
-}
-
-// ValidateConfig checks action bindings before constructing the client.
-func ValidateConfig(config Config) error {
-	const op = "ValidateConfig"
+// Valid checks action bindings before constructing the client.
+func (config Config) Valid() error {
+	const op = "Valid"
 
 	assigned := make(map[string]string)
 	for action, keys := range map[string][]string{

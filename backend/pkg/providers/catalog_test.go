@@ -34,7 +34,7 @@ func TestLoadCatalogFetchesCachesAndMapsPublishedMetadata(t *testing.T) {
 		_, _ = writer.Write([]byte(catalogFixture))
 	}))
 	t.Cleanup(server.Close)
-	config := DefaultCatalogConfig()
+	config := withDefaults[CatalogConfig]()
 	config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "catalog", "models.dev.json")
 	catalog, err := LoadCatalog(t.Context(), config, server.Client())
 	if err != nil {
@@ -85,7 +85,7 @@ func TestCatalogRefreshRetainsUsableCacheOnFailure(t *testing.T) {
 				_, _ = writer.Write([]byte(test.body))
 			}))
 			t.Cleanup(server.Close)
-			config := DefaultCatalogConfig()
+			config := withDefaults[CatalogConfig]()
 			config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
 			if err := os.WriteFile(config.CacheFile, []byte(catalogFixture), 0o600); err != nil {
 				t.Fatal(err)
@@ -112,7 +112,7 @@ func TestCatalogSourceAcceptsCatalogWithoutOpenAI(t *testing.T) {
 		_, _ = writer.Write([]byte(`{"other":{"models":{"other-model":{"name":"Other"}}}}`))
 	}))
 	t.Cleanup(server.Close)
-	config := DefaultCatalogConfig()
+	config := withDefaults[CatalogConfig]()
 	config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
 	source := NewCatalogSource(config, server.Client())
 	models, err := source.Models(t.Context(), "other")
@@ -129,7 +129,7 @@ func TestCatalogRefreshReplacesStaleCache(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) { _, _ = writer.Write([]byte(catalogFixture)) }))
 	t.Cleanup(server.Close)
-	config := DefaultCatalogConfig()
+	config := withDefaults[CatalogConfig]()
 	config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
 	if err := os.WriteFile(config.CacheFile, []byte(`{"openai":{"models":{"old":{"name":"Old"}}}}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -167,7 +167,7 @@ func TestCatalogWithoutCacheReportsDownloadAndDecodeErrors(t *testing.T) {
 				_, _ = writer.Write([]byte(test.body))
 			}))
 			t.Cleanup(server.Close)
-			config := DefaultCatalogConfig()
+			config := withDefaults[CatalogConfig]()
 			config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
 			catalog, err := LoadCatalog(t.Context(), config, server.Client())
 			if catalog != nil || errors.WhatKind(err) != test.kind {
@@ -188,7 +188,7 @@ func TestCatalogCancellationDoesNotFallBackToStaleCache(t *testing.T) {
 		<-request.Context().Done()
 	}))
 	t.Cleanup(server.Close)
-	config := DefaultCatalogConfig()
+	config := withDefaults[CatalogConfig]()
 	config.URL, config.CacheFile, config.MaxAge = server.URL, filepath.Join(t.TempDir(), "models.dev.json"), 0
 	if err := os.WriteFile(config.CacheFile, []byte(catalogFixture), 0o600); err != nil {
 		t.Fatal(err)
