@@ -117,7 +117,7 @@ func runClient(ctx context.Context, settings config.Server) error {
 	return nil
 }
 
-func compose(ctx context.Context, settings config.Server) (*application, error) {
+func compose(ctx context.Context, settings config.Server) (app *application, err error) {
 	const op = "compose"
 
 	dataDir := settings.DataDir
@@ -125,13 +125,30 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 	if err != nil {
 		return nil, errors.B.Op(op).Text("acquire daemon ownership").Err(err).Build()
 	}
+	defer func() {
+		if err == nil {
+			return // Successful composition transfers ownership to the application.
+		}
+		if closeErr := owner.Close(); closeErr != nil {
+			err = errors.B.Op(op).Text("release daemon ownership after failed composition").Err(err).Err(closeErr).Build()
+		}
+	}()
 	store, err := sqlite.Open(ctx, sqlite.Config{
 		Path:        filepath.Join(dataDir, "alfred.db"),
 		BusyTimeout: 5 * time.Second,
 	})
 	if err != nil {
-		return nil, errors.B.Op(op).Text("open SQLite store").Err(err).Err(owner.Close()).Build()
+		return nil, errors.B.Op(op).Text("open SQLite store").Err(err).Build()
 	}
+
+	defer func() {
+		if err == nil {
+			return
+		}
+		if closeErr := store.Close(); closeErr != nil {
+			err = errors.B.Op(op).Text("close SQLite store after failed composition").Err(err).Err(closeErr).Build()
+		}
+	}()
 
 	broker := events.NewBroker()
 	eventStore := jsonl.New(
@@ -143,17 +160,17 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 	eventSink := events.NewNotifyingEventSink(eventStore, broker)
 	userHome, err := os.UserHomeDir()
 	if err != nil {
-		return nil, compositionError("resolve user home", err, store, owner)
+		return nil, errors.B.Op(op).Text("resolve user home").Err(err).Build()
 	}
 	webClient := &http.Client{Timeout: 30 * time.Second}
 	searchTool, err := tools.NewWebSearch(settings.Tools.WebSearch, tools.NewExa("https://api.exa.ai/search", store, store, webClient))
 	if err != nil {
-		return nil, compositionError("create web search", err, store, owner)
+		return nil, errors.B.Op(op).Text("create web search").Err(err).Build()
 	}
 	toolRegistry, err := tools.NewRegistry(tools.NewRead(), tools.NewGrep(), tools.NewGlob(), tools.NewEdit(),
 		tools.NewShell(settings.Tools.Shell, userHome), tools.NewAskUser(), tools.NewWebFetch(webClient), searchTool)
 	if err != nil {
-		return nil, compositionError("create tool registry", err, store, owner)
+		return nil, errors.B.Op(op).Text("create tool registry").Err(err).Build()
 	}
 	catalogConfig := providers.DefaultCatalogConfig()
 	catalogConfig.CacheFile = filepath.Join(dataDir, "models.dev.json")
@@ -170,7 +187,7 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 		providers.WithMiddleware(telemetry.ModelCalls(eventSink)),
 	)
 	if err != nil {
-		return nil, compositionError("create provider registry", err, store, owner)
+		return nil, errors.B.Op(op).Text("create provider registry").Err(err).Build()
 	}
 	skillResolver := skills.NewResolver(skills.Config{
 		UserHome:   userHome,
@@ -209,7 +226,7 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 	projectService := project.NewService(store, identity.Generator[alfred.ProjectID]{})
 	providerSetup, err := providers.NewSetupService(providers.SetupDefinitions())
 	if err != nil {
-		return nil, compositionError("create provider setup service", err, store, owner)
+		return nil, errors.B.Op(op).Text("create provider setup service").Err(err).Build()
 	}
 	providerSubmitter := providers.NewSubmitter(providerSetup, store, identity.Generator[alfred.CredentialRef]{})
 	providerAuthorization := openaiAuthorization.NewAuthorizationService(
@@ -220,6 +237,11 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 			References: identity.Generator[alfred.CredentialRef]{}, HTTPClient: webClient,
 		},
 	)
+	defer func() {
+		if err != nil {
+			providerAuthorization.Close()
+		}
+	}()
 	modelService := providers.NewModelService(store, providerRegistry, store)
 	status := rpc.NewDaemonHandler(owner.InstanceID(), owner.StartedAt())
 	handler := rpc.NewServer(rpc.Handlers{
@@ -234,7 +256,7 @@ func compose(ctx context.Context, settings config.Server) (*application, error) 
 	})
 	server, err := daemon.NewServer(ctx, daemonConfig(settings), owner, handler, status)
 	if err != nil {
-		return nil, compositionError("create daemon server", err, store, owner)
+		return nil, errors.B.Op(op).Text("create daemon server").Err(err).Build()
 	}
 	return &application{server: server, store: store, providerAuthorization: providerAuthorization}, nil
 }
@@ -249,17 +271,6 @@ func (app *application) Serve(ctx context.Context) error {
 		return errors.B.Op(op).Err(serveErr).Err(closeErr).Build()
 	}
 	return nil
-}
-
-func compositionError(
-	detail string,
-	cause error,
-	store *sqlite.Store,
-	owner *daemon.Owner,
-) error {
-	const op = "compositionError"
-
-	return errors.B.Op(op).Text(detail).Err(cause).Err(store.Close()).Err(owner.Close()).Build()
 }
 
 func daemonConfig(settings config.Server) daemon.Config {
