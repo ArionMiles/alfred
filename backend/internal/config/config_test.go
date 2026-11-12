@@ -30,8 +30,8 @@ func TestLoadResolvesSettings(t *testing.T) {
 		got.Catalog.URL != "https://models.dev/api.json" || got.Skills.SystemRoot != "/etc/alfred/skills" ||
 		got.Catalog.CacheFileName != "models.dev.json" || got.Catalog.RequestTimeout != 15*time.Second ||
 		got.Tools.WebSearch.Exa.Endpoint != "https://api.exa.ai/search" || got.Tools.WebSearch.Exa.RequestTimeout != 30*time.Second ||
-		got.Tools.WebFetch.RequestTimeout != 30*time.Second || got.OpenAIAuthorization.RequestTimeout != 30*time.Second ||
-		got.OpenAIAuthorization.CallbackPath != "/auth/callback" || got.OpenAIAuthorization.TokenURL == "" {
+		got.Tools.WebFetch.RequestTimeout != 30*time.Second || got.Providers.OpenAI.Authorization.RequestTimeout != 30*time.Second ||
+		got.Providers.OpenAI.Authorization.CallbackPath != "/auth/callback" || got.Providers.OpenAI.Authorization.TokenURL == "" {
 		t.Fatalf("dependency defaults = %+v", got)
 	}
 }
@@ -79,7 +79,7 @@ func TestLoadDoesNotExposeInternalSettings(t *testing.T) {
 	t.Setenv("ALFRED_SQLITE_BUSY_TIMEOUT", "99s")
 	t.Setenv("ALFRED_OPENAI_AUTHORIZATION_TOKEN_URL", "http://unexpected.example")
 	got, err := config.Load()
-	if err != nil || got.SQLite.BusyTimeout != 5*time.Second || got.OpenAIAuthorization.TokenURL != "https://auth.openai.com/api/accounts/oauth/token" {
+	if err != nil || got.SQLite.BusyTimeout != 5*time.Second || got.Providers.OpenAI.Authorization.TokenURL != "https://auth.openai.com/api/accounts/oauth/token" {
 		t.Fatalf("internal environment setting exposed: %+v, %v", got, err)
 	}
 	for _, source := range []string{
@@ -122,5 +122,35 @@ func TestConfigValid(t *testing.T) {
 				t.Fatalf("Valid() = %v, wantError = %v", err, test.wantError)
 			}
 		})
+	}
+}
+
+func TestLoadOpenAIAuthorizationTimeout(t *testing.T) {
+	root := configEnvironment(t)
+	path := filepath.Join(root, "config", "alfred", "config.toml")
+	settings, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := settings.Providers.OpenAI.Authorization.AttemptTimeout; got != 10*time.Minute {
+		t.Fatalf("default attempt timeout = %s", got)
+	}
+	writeConfig(t, path, "[providers.openai.authorization]\nattempt_timeout = '15m'\n")
+	settings, err = config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := settings.Providers.OpenAI.Authorization.AttemptTimeout; got != 15*time.Minute {
+		t.Fatalf("file attempt timeout = %s", got)
+	}
+	for _, contents := range []string{
+		"[providers.openai.authorization]\nattempt_timeout = 'invalid'\n",
+		"[providers.openai.authorization]\nattempt_timeout = true\n",
+		"[providers.openai.authorization]\ntoken_url = 'http://unexpected.example'\n",
+	} {
+		writeConfig(t, path, contents)
+		if _, err := config.Load(); err == nil {
+			t.Fatalf("accepted invalid or private settings: %s", contents)
+		}
 	}
 }

@@ -36,11 +36,11 @@ func TestSearchSetupIsSeparateFromModelProvidersAndFeedsExa(t *testing.T) {
 	setup := tools.NewSearchSetup(tools.SearchSetupDefinitions(), store, store)
 	server := connect.NewServer()
 	alfredv1connect.RegisterSearchSetupServiceHandler(server, NewSearchSetupHandler(setup))
-	modelSetup, err := providers.NewSetupService(providers.SetupDefinitions())
+	modelSetup, err := providers.NewSetupService(providers.SetupDefinitions(), store, store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	alfredv1connect.RegisterProviderSetupServiceHandler(server, NewProviderSetupHandler(modelSetup, providers.NewSubmitter(modelSetup, store), store, nil))
+	alfredv1connect.RegisterProviderSetupServiceHandler(server, NewProviderSetupHandler(modelSetup))
 	clients := NewClients(connect.NewClient(connectinprocess.New(server)))
 	definitions, err := clients.ProviderSetup.ListProviderDefinitions(t.Context(), &alfredv1.ListProviderDefinitionsRequest{})
 	if err != nil {

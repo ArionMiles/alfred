@@ -65,6 +65,15 @@ on the same computer. Complete the OpenAI account and permission screens, then
 return to Alfred. Press Esc while Alfred is waiting to cancel without replacing
 the saved connection.
 
+Browser sign-in expires after ten minutes by default. If an attempt expires,
+start Continue with ChatGPT again. To allow more time, set this in the server's
+`config.toml` before starting the daemon:
+
+```toml
+[providers.openai.authorization]
+attempt_timeout = "15m"
+```
+
 Alfred validates the returned account identity before replacing the connection.
 The browser flow uses a stable, randomly generated identifier for this Alfred
 data directory; it does not derive the identifier from the host name or hardware.
@@ -135,16 +144,21 @@ var settings openai.AuthorizationConfig
 if err := defaults.Set(&settings); err != nil {
     return err
 }
-authorization := openai.NewAuthorizationService(
-    ctx, settings, dependencies,
+authorization := openai.NewAuthorizer(
+    settings, dependencies,
     openai.WithAgentName("My Agent"),
     openai.WithSuccessHTML("<!doctype html><title>Connected</title><h1>Ready</h1>"),
 )
-defer authorization.Close()
 ```
 
-`dependencies` supplies the application's stores. The service builds its HTTP
-client using `settings.RequestTimeout`. Use `WithAuthorizationHTTPClient` for a
+`dependencies` supplies the application's stores. Register the authorizer with
+`providers.WithAuthorizer("openai", authorization)` when constructing the setup
+service. Its `Shutdown(ctx)` cancels active attempts and waits for cleanup before
+you close those stores. For direct SDK use, `Authorize` runs one attempt under
+the supplied context and returns only after its callback handlers stop.
+`settings.AttemptTimeout` defaults to ten minutes; cancellation can end it sooner.
+
+The authorizer builds its HTTP client using `settings.RequestTimeout`. Use `WithAuthorizationHTTPClient` for a
 custom authorization transport; the supplied client's own timeout applies.
 These constructor options are separate from server TOML and TUI settings.
 The agent name is used for first registration and the bundled callback page;

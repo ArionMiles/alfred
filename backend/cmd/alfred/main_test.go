@@ -48,9 +48,9 @@ func TestComposeReleasesResourcesOnFailure(t *testing.T) {
 				}
 			}
 
-			app, err := compose(t.Context(), settings)
-			if app != nil || err == nil || !strings.Contains(err.Error(), test.failure) {
-				t.Fatalf("compose() = %v, %v; want %q failure", app, err, test.failure)
+			server, err := compose(t.Context(), settings)
+			if server != nil || err == nil || !strings.Contains(err.Error(), test.failure) {
+				t.Fatalf("compose() = %v, %v; want %q failure", server, err, test.failure)
 			}
 			if test.corruptDiscovery {
 				if !strings.Contains(err.Error(), "release daemon ownership after failed composition") ||
@@ -91,7 +91,7 @@ func TestComposeReleasesResourcesOnFailure(t *testing.T) {
 	}
 }
 
-func TestComposeTransfersResourcesToApplication(t *testing.T) {
+func TestComposeTransfersResourcesToServer(t *testing.T) {
 	t.Parallel()
 	var settings config.C
 	defaults.MustSet(&settings)
@@ -101,19 +101,16 @@ func TestComposeTransfersResourcesToApplication(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	app, err := compose(ctx, settings)
+	server, err := compose(ctx, settings)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		cancel()
-		if err := app.Serve(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		if err := server.Close(); err != nil {
 			t.Error(err)
 		}
 	})
-	if _, err := app.store.GetKeyValue(t.Context(), "test/missing"); errors.WhatKind(err) != errors.NotFound {
-		t.Fatalf("successful composition closed its store: %v", err)
-	}
 	owner, err := daemon.Acquire(daemon.Config{DataDir: settings.DataDir})
 	if err == nil {
 		if closeErr := owner.Close(); closeErr != nil {

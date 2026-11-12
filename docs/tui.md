@@ -1,10 +1,10 @@
 # Terminal client
 
-Run `alfred` from your project directory. It connects to Alfred's background
+Run `alfred tui` from your project directory. It connects to Alfred's background
 service and opens the TUI. Use `/sessions` to reopen a conversation from this
 project; send a message to start a new one.
 
-For a container deployment, run `docker compose exec alfred alfred`. The TUI
+For a container deployment, run `docker compose exec alfred alfred tui`. The TUI
 uses the container's current directory and discovers the daemon already running
 there. Files and Shell commands operate on the daemon's filesystem. See
 [Deployment](deployment.md) for setup.

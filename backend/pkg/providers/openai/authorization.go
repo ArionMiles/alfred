@@ -5,12 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"io"
-	"maps"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -43,14 +41,15 @@ var authorizationScopes = []string{
 	requiredDirectScope,
 }
 
-// AuthorizationConfig contains OpenAI's public authorization endpoints.
+// AuthorizationConfig contains OpenAI onboarding endpoints and lifetime settings.
 type AuthorizationConfig struct {
-	Issuer         string        `default:"https://auth.openai.com"`
-	AuthorizeURL   string        `default:"https://auth.openai.com/api/accounts/authorize"`
-	TokenURL       string        `default:"https://auth.openai.com/api/accounts/oauth/token"`
-	Resource       string        `default:"https://api.openai.com/v1"`
-	CallbackPath   string        `default:"/auth/callback"`
-	RequestTimeout time.Duration `default:"30s"`
+	Issuer         string        `koanf:"-" default:"https://auth.openai.com"`
+	AuthorizeURL   string        `koanf:"-" default:"https://auth.openai.com/api/accounts/authorize"`
+	TokenURL       string        `koanf:"-" default:"https://auth.openai.com/api/accounts/oauth/token"`
+	Resource       string        `koanf:"-" default:"https://api.openai.com/v1"`
+	CallbackPath   string        `koanf:"-" default:"/auth/callback"`
+	RequestTimeout time.Duration `koanf:"-" default:"30s"`
+	AttemptTimeout time.Duration `koanf:"attempt_timeout" default:"10m"`
 }
 
 type authorizationStore interface {
@@ -66,20 +65,14 @@ type AuthorizationDependencies struct {
 	Credentials alfred.CredentialProvider
 }
 
-// AuthorizationService owns pending local callbacks and the resulting credentials.
-type AuthorizationService struct {
+// Authorizer owns pending local callbacks and the resulting credentials.
+type Authorizer struct {
 	config      AuthorizationConfig
 	store       authorizationStore
 	credentials alfred.CredentialProvider
 	client      *http.Client
-	lifecycle   context.Context
 	agentName   string
 	successHTML string
-
-	// attemptsMu coordinates callback completion with polling, cancellation,
-	// and shutdown, including the final check-and-save transition.
-	attemptsMu sync.Mutex
-	attempts   map[alfred.ProviderAuthorizationID]*authorizationAttempt
 }
 
 type authorizationAttempt struct {
@@ -89,8 +82,6 @@ type authorizationAttempt struct {
 	verifier    string
 	redirectURL string
 	existing    *oauthCredentialRecord
-	listener    net.Listener
-	processing  bool
 }
 
 type agentHostIDRecord struct {
@@ -126,38 +117,30 @@ type tokenResponse struct {
 	EarliestRefreshAt int64  `json:"earliest_refresh_at"`
 }
 
-// NewAuthorizationService constructs the daemon-owned browser authorization flow.
-func NewAuthorizationService(
-	ctx context.Context,
-	config AuthorizationConfig,
-	dependencies AuthorizationDependencies,
-	options ...AuthorizationOption,
-) *AuthorizationService {
-	service := &AuthorizationService{
+// NewAuthorizer constructs OpenAI onboarding without starting background work.
+func NewAuthorizer(config AuthorizationConfig, dependencies AuthorizationDependencies, options ...AuthorizationOption) *Authorizer {
+	service := &Authorizer{
 		config: config, store: dependencies.Store, credentials: dependencies.Credentials,
-		client: &http.Client{Timeout: config.RequestTimeout}, lifecycle: ctx,
-		attempts:  make(map[alfred.ProviderAuthorizationID]*authorizationAttempt),
-		agentName: "Alfred",
+		client: &http.Client{Timeout: config.RequestTimeout}, agentName: "Alfred",
 	}
 	for _, option := range options {
 		option(service)
 	}
-	go func() {
-		<-ctx.Done()
-		service.Close()
-	}()
 	return service
 }
 
-// Start begins a loopback authorization flow without changing saved provider state.
-func (service *AuthorizationService) Start(
+// Authorize owns one bounded attempt and returns after all callback handlers stop.
+func (service *Authorizer) Authorize(
 	ctx context.Context,
 	request alfred.ProviderAuthorizationRequest,
+	publish func(string),
 ) (alfred.ProviderAuthorization, error) {
-	const op = "Start"
-
+	const op = "Authorize"
+	ctx, cancel := context.WithTimeout(ctx, service.config.AttemptTimeout)
+	defer cancel()
 	if request.Type != openAIProviderType || request.MethodID != chatGPTSubscriptionMethod {
-		return alfred.ProviderAuthorization{}, errors.B.Op(op).KindInvalidArgument().Text("unsupported provider authorization method").Build()
+		return alfred.ProviderAuthorization{}, errors.B.Op(op).KindInvalidArgument().
+			Text("unsupported provider authorization method").UserMsg("This OpenAI authorization method is unavailable.").Build()
 	}
 	instance, existing, err := service.loadExisting(ctx, request)
 	if err != nil {
@@ -167,111 +150,96 @@ func (service *AuthorizationService) Start(
 	if err != nil {
 		return alfred.ProviderAuthorization{}, errors.B.Op(op).Text("load OpenAI agent host ID").Err(err).Build()
 	}
-	id := identity.New[alfred.ProviderAuthorizationID]()
-	state := rand.Text()
-	nonce := rand.Text()
-	verifier := oauth2.GenerateVerifier()
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return alfred.ProviderAuthorization{}, errors.B.Op(op).Text("listen for authorization callback").Err(err).Build()
 	}
-	redirectURL := "http://" + listener.Addr().String() + service.config.CallbackPath
+	defer func() { _ = listener.Close() }()
+	attempt := &authorizationAttempt{
+		state: rand.Text(), nonce: rand.Text(), verifier: oauth2.GenerateVerifier(),
+		redirectURL: "http://" + listener.Addr().String() + service.config.CallbackPath, existing: existing,
+		result: alfred.ProviderAuthorization{State: alfred.ProviderAuthorizationPending},
+	}
 	clientID := dynamicAgentClientID
 	if existing != nil {
 		clientID = existing.ClientID
 	}
 	authorizationURL, err := service.authorizationURL(authorizationURLParams{
-		clientID: clientID, redirectURL: redirectURL, state: state, nonce: nonce,
-		verifier: verifier, hostID: hostID, existing: existing,
+		clientID: clientID, redirectURL: attempt.redirectURL,
+		state: attempt.state, nonce: attempt.nonce, verifier: attempt.verifier, hostID: hostID, existing: existing,
 	})
 	if err != nil {
-		_ = listener.Close()
-		return alfred.ProviderAuthorization{}, errors.B.Op(op).Text("build authorization URL").Err(err).Build()
+		return alfred.ProviderAuthorization{}, errors.B.Op(op).Err(err).Build()
 	}
-	result := alfred.ProviderAuthorization{ID: id, State: alfred.ProviderAuthorizationPending, AuthorizationURL: authorizationURL}
-	attempt := &authorizationAttempt{
-		result: result, state: state, nonce: nonce, verifier: verifier,
-		redirectURL: redirectURL, existing: existing, listener: listener,
-	}
-	service.attemptsMu.Lock()
-	service.attempts[id] = attempt
-	service.attemptsMu.Unlock()
-
+	completed := make(chan struct{})
 	mux := http.NewServeMux()
-	mux.HandleFunc(service.config.CallbackPath, func(writer http.ResponseWriter, callback *http.Request) {
-		service.handleCallback(id, instance, writer, callback)
-	})
-	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-	go func() {
-		serveErr := server.Serve(listener)
-		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			service.fail(id, "The local authorization callback stopped unexpectedly.")
-		}
-	}()
-	return result, nil
-}
-
-// Get returns safe authorization progress.
-func (service *AuthorizationService) Get(
-	_ context.Context,
-	id alfred.ProviderAuthorizationID,
-) (alfred.ProviderAuthorization, error) {
-	const op = "Get"
-
-	service.attemptsMu.Lock()
-	defer service.attemptsMu.Unlock()
-	attempt, exists := service.attempts[id]
-	if !exists {
-		return alfred.ProviderAuthorization{}, errors.B.Op(op).KindNotFound().
-			UserMsg("Authorization is no longer available. Reopen Providers and start again.").Build()
+	mux.HandleFunc(service.config.CallbackPath, service.callbackHandler(ctx, attempt, instance, completed))
+	server := &http.Server{
+		Handler: mux, ReadHeaderTimeout: 5 * time.Second,
+		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
-	return cloneAuthorization(attempt.result), nil
-}
-
-// Cancel stops a pending callback and leaves saved provider state unchanged.
-func (service *AuthorizationService) Cancel(
-	_ context.Context,
-	id alfred.ProviderAuthorizationID,
-) (alfred.ProviderAuthorization, error) {
-	const op = "Cancel"
-
-	service.attemptsMu.Lock()
-	attempt, exists := service.attempts[id]
-	if !exists {
-		service.attemptsMu.Unlock()
-		return alfred.ProviderAuthorization{}, errors.B.Op(op).KindNotFound().Text("provider authorization does not exist").Build()
+	served := make(chan error, 1)
+	go func() { served <- server.Serve(listener) }()
+	publish(authorizationURL)
+	var serveErr error
+	select {
+	case <-completed:
+	case <-ctx.Done():
+	case serveErr = <-served:
 	}
-	if attempt.result.State == alfred.ProviderAuthorizationPending {
+	// Cancel outstanding requests, then wait even if a collaborator is slow to
+	// honor cancellation. The setup service bounds shutdown waiting without
+	// closing storage underneath a callback that is still writing.
+	stopCause := ctx.Err()
+	cancel()
+	if err := server.Shutdown(context.Background()); err != nil {
+		return alfred.ProviderAuthorization{}, errors.B.Op(op).Text("stop authorization callbacks").Err(err).Build()
+	}
+	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) && attempt.result.State == alfred.ProviderAuthorizationPending {
+		attempt.result = alfred.ProviderAuthorization{State: alfred.ProviderAuthorizationFailed, Message: "The local authorization callback stopped unexpectedly."}
+	}
+	if attempt.result.State == alfred.ProviderAuthorizationPending ||
+		(stopCause != nil && attempt.result.State != alfred.ProviderAuthorizationCompleted) {
 		attempt.result.State = alfred.ProviderAuthorizationCanceled
-		attempt.result.AuthorizationURL = ""
 		attempt.result.Message = "Authorization was canceled."
 	}
-	result := cloneAuthorization(attempt.result)
-	listener := attempt.listener
-	service.attemptsMu.Unlock()
-	_ = listener.Close()
-	return result, nil
+	if errors.Is(stopCause, context.DeadlineExceeded) && attempt.result.State != alfred.ProviderAuthorizationCompleted {
+		attempt.result.State = alfred.ProviderAuthorizationFailed
+		attempt.result.Message = "Authorization expired. Start again to reconnect OpenAI."
+	}
+	return attempt.result, nil
 }
 
-// Close stops every pending loopback listener.
-func (service *AuthorizationService) Close() {
-	service.attemptsMu.Lock()
-	listeners := make([]net.Listener, 0, len(service.attempts))
-	for _, attempt := range service.attempts {
-		if attempt.result.State == alfred.ProviderAuthorizationPending {
-			attempt.result.State = alfred.ProviderAuthorizationCanceled
-			attempt.result.AuthorizationURL = ""
-			attempt.result.Message = "Authorization stopped because Alfred is shutting down."
-			listeners = append(listeners, attempt.listener)
+// callbackHandler admits one state-validated callback while allowing harmless
+// invalid requests to leave the attempt available for the real browser redirect.
+func (service *Authorizer) callbackHandler(
+	ctx context.Context,
+	attempt *authorizationAttempt,
+	instance alfred.ProviderInstance,
+	completed chan<- struct{},
+) http.HandlerFunc {
+	claimed := make(chan struct{}, 1)
+	return func(writer http.ResponseWriter, callback *http.Request) {
+		if callback.Method != http.MethodGet {
+			http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
+			return
 		}
-	}
-	service.attemptsMu.Unlock()
-	for _, listener := range listeners {
-		_ = listener.Close()
+		if callback.URL.Query().Get("state") != attempt.state {
+			http.Error(writer, "invalid authorization state", http.StatusBadRequest)
+			return
+		}
+		select {
+		case claimed <- struct{}{}:
+		default:
+			http.Error(writer, "invalid authorization state", http.StatusBadRequest)
+			return
+		}
+		defer close(completed)
+		service.handleCallback(ctx, attempt, instance, writer, callback)
 	}
 }
 
-func (service *AuthorizationService) loadExisting(
+func (service *Authorizer) loadExisting(
 	ctx context.Context,
 	request alfred.ProviderAuthorizationRequest,
 ) (alfred.ProviderInstance, *oauthCredentialRecord, error) {
@@ -319,7 +287,7 @@ type authorizationURLParams struct {
 	existing                                              *oauthCredentialRecord
 }
 
-func (service *AuthorizationService) authorizationURL(params authorizationURLParams) (string, error) {
+func (service *Authorizer) authorizationURL(params authorizationURLParams) (string, error) {
 	const op = "authorizationURL"
 
 	endpoint, err := url.Parse(service.config.AuthorizeURL)
@@ -354,65 +322,56 @@ func (service *AuthorizationService) authorizationURL(params authorizationURLPar
 	return endpoint.String(), nil
 }
 
-func (service *AuthorizationService) handleCallback(
-	id alfred.ProviderAuthorizationID,
+func (service *Authorizer) handleCallback(
+	ctx context.Context,
+	attempt *authorizationAttempt,
 	instance alfred.ProviderInstance,
 	writer http.ResponseWriter,
 	request *http.Request,
 ) {
-	if request.Method != http.MethodGet {
-		http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	service.attemptsMu.Lock()
-	attempt, exists := service.attempts[id]
-	valid := exists && attempt.result.State == alfred.ProviderAuthorizationPending && !attempt.processing && request.URL.Query().Get("state") == attempt.state
-	if valid {
-		attempt.processing = true
-	}
-	service.attemptsMu.Unlock()
-	if !valid {
-		http.Error(writer, "invalid authorization state", http.StatusBadRequest)
-		return
-	}
 	query := request.URL.Query()
 	switch query.Get("error") {
 	case "":
 	case "access_denied":
 		message := "OpenAI authorization was denied."
-		service.finish(id, alfred.ProviderAuthorizationDenied, message, "", nil)
+		service.finish(attempt, alfred.ProviderAuthorizationDenied, message, "", nil)
 		service.authorizationPage(writer, false, message)
 		return
 	default:
 		message := "OpenAI authorization failed."
-		service.fail(id, message)
+		service.fail(attempt, message)
 		service.authorizationPage(writer, false, message)
 		return
 	}
 	code := query.Get("code")
 	if code == "" {
-		service.fail(id, "OpenAI returned an incomplete authorization response.")
+		service.fail(attempt, "OpenAI returned an incomplete authorization response.")
 		http.Error(writer, "missing authorization code", http.StatusBadRequest)
 		return
 	}
 	clientID := query.Get("client_id")
 	if attempt.existing != nil {
 		if clientID != "" && clientID != attempt.existing.ClientID {
-			service.fail(id, "OpenAI returned an unexpected client identity.")
+			service.fail(attempt, "OpenAI returned an unexpected client identity.")
 			http.Error(writer, "unexpected client identity", http.StatusBadRequest)
 			return
 		}
 		clientID = attempt.existing.ClientID
 	} else if clientID == "" {
-		service.fail(id, "OpenAI did not issue a client identity.")
+		service.fail(attempt, "OpenAI did not issue a client identity.")
 		http.Error(writer, "missing client identity", http.StatusBadRequest)
 		return
 	}
-	ctx, cancel := context.WithTimeout(service.lifecycle, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, service.config.RequestTimeout)
 	defer cancel()
 	tokens, err := service.exchange(ctx, code, clientID, attempt)
 	if err != nil {
-		service.fail(id, "OpenAI token exchange failed.")
+		if errors.Is(ctx.Err(), context.Canceled) {
+			service.finish(attempt, alfred.ProviderAuthorizationCanceled, "Authorization was canceled.", "", nil)
+			http.Error(writer, "authorization was canceled", http.StatusConflict)
+			return
+		}
+		service.fail(attempt, "OpenAI token exchange failed.")
 		http.Error(writer, "token exchange failed", http.StatusBadGateway)
 		return
 	}
@@ -422,68 +381,41 @@ func (service *AuthorizationService) handleCallback(
 		if errors.WhatKind(err) == errors.Conflict {
 			message = "The selected OpenAI account does not match this connection. Reconnect using the original account."
 		}
-		service.fail(id, message)
+		service.fail(attempt, message)
 		http.Error(writer, "invalid authorization result", http.StatusBadGateway)
 		return
 	}
 	instance.Name = SubscriptionInstanceName
 	instance.Settings = map[string]string{}
-	saved, err := service.saveCompleted(ctx, id, &instance, record, accountLabel)
-	if err != nil {
-		service.fail(id, "Alfred could not save the OpenAI connection.")
-		http.Error(writer, "could not save connection", http.StatusInternalServerError)
-		return
-	}
-	if !saved {
+	if ctx.Err() != nil {
+		service.finish(attempt, alfred.ProviderAuthorizationCanceled, "Authorization was canceled.", "", nil)
 		http.Error(writer, "authorization was canceled", http.StatusConflict)
 		return
 	}
+	if err := service.save(ctx, &instance, record); err != nil {
+		service.fail(attempt, "Alfred could not save the OpenAI connection.")
+		http.Error(writer, "could not save connection", http.StatusInternalServerError)
+		return
+	}
+	message := "OpenAI account connected."
+	if !record.directAccessEnabled() {
+		message = "OpenAI account connected, but ChatGPT plan usage was not enabled. Reconnect it to use models."
+	}
+	service.finish(attempt, alfred.ProviderAuthorizationCompleted, message, accountLabel, &instance)
 	if service.successHTML != "" && record.directAccessEnabled() {
 		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 		writer.Header().Set("Cache-Control", "no-store")
 		_, _ = io.WriteString(writer, service.successHTML)
 		return
 	}
-	message := "Your OpenAI account is connected. Return to " + service.agentName + " to continue."
+	message = "Your OpenAI account is connected. Return to " + service.agentName + " to continue."
 	if !record.directAccessEnabled() {
 		message = "OpenAI account connected, but ChatGPT plan usage was not enabled. Return to " + service.agentName + " and reconnect to enable it."
 	}
 	service.authorizationPage(writer, true, message)
 }
 
-func (service *AuthorizationService) saveCompleted(
-	ctx context.Context,
-	id alfred.ProviderAuthorizationID,
-	instance *alfred.ProviderInstance,
-	record oauthCredentialRecord,
-	accountLabel string,
-) (bool, error) {
-	const op = "saveCompleted"
-
-	service.attemptsMu.Lock()
-	defer service.attemptsMu.Unlock()
-	attempt, exists := service.attempts[id]
-	if !exists || attempt.result.State != alfred.ProviderAuthorizationPending {
-		return false, nil
-	}
-	if err := service.save(ctx, instance, record); err != nil {
-		return false, errors.B.Op(op).Err(err).Build()
-	}
-	attempt.result.State = alfred.ProviderAuthorizationCompleted
-	attempt.result.AuthorizationURL = ""
-	attempt.result.Message = "OpenAI account connected."
-	if !record.directAccessEnabled() {
-		attempt.result.Message = "OpenAI account connected, but ChatGPT plan usage was not enabled. Reconnect it to use models."
-	}
-	attempt.result.AccountLabel = accountLabel
-	cloned := *instance
-	cloned.Settings = maps.Clone(instance.Settings)
-	attempt.result.Instance = &cloned
-	_ = attempt.listener.Close()
-	return true, nil
-}
-
-func (service *AuthorizationService) exchange(
+func (service *Authorizer) exchange(
 	ctx context.Context,
 	code, clientID string,
 	attempt *authorizationAttempt,
@@ -522,7 +454,7 @@ func (service *AuthorizationService) exchange(
 	return tokens, nil
 }
 
-func (service *AuthorizationService) validateTokens(
+func (service *Authorizer) validateTokens(
 	ctx context.Context,
 	clientID string,
 	attempt *authorizationAttempt,
@@ -568,7 +500,7 @@ func (service *AuthorizationService) validateTokens(
 	}, accountLabel, nil
 }
 
-func (service *AuthorizationService) save(
+func (service *Authorizer) save(
 	ctx context.Context,
 	instance *alfred.ProviderInstance,
 	record oauthCredentialRecord,
@@ -592,7 +524,7 @@ func (service *AuthorizationService) save(
 	return nil
 }
 
-func (service *AuthorizationService) agentHostID(ctx context.Context) (string, error) {
+func (service *Authorizer) agentHostID(ctx context.Context) (string, error) {
 	const op = "agentHostID"
 
 	data, err := service.store.GetKeyValue(ctx, agentHostIDKey)
@@ -621,41 +553,15 @@ func (service *AuthorizationService) agentHostID(ctx context.Context) (string, e
 	return id, nil
 }
 
-func (service *AuthorizationService) finish(
-	id alfred.ProviderAuthorizationID,
+func (service *Authorizer) finish(
+	attempt *authorizationAttempt,
 	state alfred.ProviderAuthorizationState,
 	message, accountLabel string,
 	instance *alfred.ProviderInstance,
 ) {
-	service.attemptsMu.Lock()
-	attempt, exists := service.attempts[id]
-	if !exists || attempt.result.State != alfred.ProviderAuthorizationPending {
-		service.attemptsMu.Unlock()
-		return
-	}
-	attempt.result.State = state
-	attempt.result.AuthorizationURL = ""
-	attempt.result.Message = message
-	attempt.result.AccountLabel = accountLabel
-	if instance != nil {
-		cloned := *instance
-		cloned.Settings = maps.Clone(instance.Settings)
-		attempt.result.Instance = &cloned
-	}
-	listener := attempt.listener
-	service.attemptsMu.Unlock()
-	_ = listener.Close()
+	attempt.result = alfred.ProviderAuthorization{State: state, Message: message, AccountLabel: accountLabel, Instance: instance}
 }
 
-func (service *AuthorizationService) fail(id alfred.ProviderAuthorizationID, message string) {
-	service.finish(id, alfred.ProviderAuthorizationFailed, message, "", nil)
-}
-
-func cloneAuthorization(value alfred.ProviderAuthorization) alfred.ProviderAuthorization {
-	if value.Instance != nil {
-		cloned := *value.Instance
-		cloned.Settings = maps.Clone(value.Instance.Settings)
-		value.Instance = &cloned
-	}
-	return value
+func (service *Authorizer) fail(attempt *authorizationAttempt, message string) {
+	service.finish(attempt, alfred.ProviderAuthorizationFailed, message, "", nil)
 }

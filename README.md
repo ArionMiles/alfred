@@ -34,7 +34,19 @@ Start Alfred from the project you want to work in:
 
 ```sh
 cd /path/to/your/project
-alfred
+alfred tui
+```
+
+Bare `alfred` shows usage. Use `alfred tui` to open the client or `alfred serve`
+to run the daemon in the foreground.
+
+Show command help or the installed build version without starting Alfred:
+
+```sh
+alfred --help
+alfred tui --help
+alfred serve --help
+alfred --version
 ```
 
 ### Docker Compose
@@ -42,7 +54,7 @@ alfred
 With Docker and Compose installed, run this in an empty directory:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ArionMiles/alfred/main/deploy/install.sh | bash && docker compose up -d --wait && docker compose exec alfred alfred
+curl -fsSL https://raw.githubusercontent.com/ArionMiles/alfred/main/deploy/install.sh | bash && docker compose up -d --wait && docker compose exec alfred alfred tui
 ```
 
 The installer downloads `docker-compose.yml` and `config.toml`, preserving an

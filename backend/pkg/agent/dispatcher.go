@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"maps"
 	"sync"
 
 	"github.com/ArionMiles/alfred"
@@ -11,9 +12,13 @@ import (
 // Dispatcher coordinates active executions around a stateless Runner.
 type Dispatcher struct {
 	lifetime context.Context
+	stop     context.CancelFunc
 	runner   *Runner
-	mu       sync.Mutex
-	active   map[alfred.RunID]*activeRun
+	// activeMu protects admission, execution membership, and cancellation state.
+	activeMu sync.Mutex
+	stopping bool
+	// During shutdown, completed entries remain until their durable state is settled.
+	active map[alfred.RunID]*activeRun
 }
 
 type activeRun struct {
@@ -24,10 +29,12 @@ type activeRun struct {
 	result          error
 }
 
-// NewDispatcher creates a dispatcher whose executions are bounded by lifetime.
-func NewDispatcher(lifetime context.Context, runner *Runner) *Dispatcher {
+// NewDispatcher creates a dispatcher that owns its execution lifetime.
+func NewDispatcher(runner *Runner) *Dispatcher {
+	lifetime, stop := context.WithCancel(context.Background())
 	return &Dispatcher{
 		lifetime: lifetime,
+		stop:     stop,
 		runner:   runner,
 		active:   make(map[alfred.RunID]*activeRun),
 	}
@@ -41,17 +48,13 @@ func (dispatcher *Dispatcher) Dispatch(ctx context.Context, runID alfred.RunID) 
 	if err := ctx.Err(); err != nil {
 		return errors.B.Op(op).Textf("dispatch run %q", runID).Err(err).Build()
 	}
-	if err := dispatcher.lifetime.Err(); err != nil {
-		return errors.B.
-			Op(op).
-			Textf("dispatch run %q after service stopped", runID).
-			Err(err).
-			Build()
+	dispatcher.activeMu.Lock()
+	if dispatcher.stopping {
+		dispatcher.activeMu.Unlock()
+		return errors.B.Op(op).KindFailedPrecondition().UserMsg("Alfred is shutting down.").Build()
 	}
-
-	dispatcher.mu.Lock()
 	if _, exists := dispatcher.active[runID]; exists {
-		dispatcher.mu.Unlock()
+		dispatcher.activeMu.Unlock()
 		return errors.B.
 			Op(op).
 			KindConflict().
@@ -65,7 +68,7 @@ func (dispatcher *Dispatcher) Dispatch(ctx context.Context, runID alfred.RunID) 
 		done:   make(chan struct{}),
 	}
 	dispatcher.active[runID] = active
-	dispatcher.mu.Unlock()
+	dispatcher.activeMu.Unlock()
 
 	go dispatcher.execute(runContext, runID, active)
 	return nil
@@ -79,16 +82,16 @@ func (dispatcher *Dispatcher) execute(
 	_ = dispatcher.runner.Execute(ctx, runID)
 	active.cancel()
 
-	dispatcher.mu.Lock()
+	dispatcher.activeMu.Lock()
 	if !active.cancelRequested {
-		if dispatcher.active[runID] == active {
+		if !dispatcher.stopping && dispatcher.active[runID] == active {
 			delete(dispatcher.active, runID)
 		}
 		close(active.done)
-		dispatcher.mu.Unlock()
+		dispatcher.activeMu.Unlock()
 		return
 	}
-	dispatcher.mu.Unlock()
+	dispatcher.activeMu.Unlock()
 
 	dispatcher.completeActiveRun(
 		runID,
@@ -103,6 +106,10 @@ func (dispatcher *Dispatcher) ResolveApproval(
 	runID alfred.RunID,
 	resolution alfred.ApprovalResolution,
 ) error {
+	if err := dispatcher.acceptControl(); err != nil {
+		return err
+	}
+
 	if err := dispatcher.runner.resolveApproval(ctx, runID, resolution); err != nil {
 		return err
 	}
@@ -115,6 +122,10 @@ func (dispatcher *Dispatcher) ProvideInput(
 	runID alfred.RunID,
 	response alfred.InputResponse,
 ) error {
+	if err := dispatcher.acceptControl(); err != nil {
+		return err
+	}
+
 	if err := dispatcher.runner.provideInput(ctx, runID, response); err != nil {
 		return err
 	}
@@ -123,6 +134,10 @@ func (dispatcher *Dispatcher) ProvideInput(
 
 // ResumeRun validates and redispatches an interrupted run.
 func (dispatcher *Dispatcher) ResumeRun(ctx context.Context, runID alfred.RunID) error {
+	if err := dispatcher.acceptControl(); err != nil {
+		return err
+	}
+
 	if err := dispatcher.runner.resumeRun(ctx, runID); err != nil {
 		return err
 	}
@@ -138,7 +153,12 @@ func (dispatcher *Dispatcher) CancelRun(ctx context.Context, runID alfred.RunID)
 		return errors.B.Op(op).Textf("cancel run %q", runID).Err(err).Build()
 	}
 
-	dispatcher.mu.Lock()
+	dispatcher.activeMu.Lock()
+	if dispatcher.stopping {
+		dispatcher.activeMu.Unlock()
+		return errors.B.Op(op).KindFailedPrecondition().UserMsg("Alfred is shutting down.").Build()
+	}
+
 	active := dispatcher.active[runID]
 	if active == nil {
 		active = &activeRun{
@@ -146,7 +166,7 @@ func (dispatcher *Dispatcher) CancelRun(ctx context.Context, runID alfred.RunID)
 			cancelRequested: true,
 		}
 		dispatcher.active[runID] = active
-		dispatcher.mu.Unlock()
+		dispatcher.activeMu.Unlock()
 
 		err := dispatcher.cancelStoppedRun(context.WithoutCancel(ctx), runID)
 		dispatcher.completeActiveRun(runID, active, err)
@@ -157,7 +177,7 @@ func (dispatcher *Dispatcher) CancelRun(ctx context.Context, runID alfred.RunID)
 		active.cancel()
 	}
 	done := active.done
-	dispatcher.mu.Unlock()
+	dispatcher.activeMu.Unlock()
 
 	select {
 	case <-done:
@@ -167,21 +187,79 @@ func (dispatcher *Dispatcher) CancelRun(ctx context.Context, runID alfred.RunID)
 	}
 }
 
+// Shutdown leaves storage open and retains unsettled executions when its context expires.
+func (dispatcher *Dispatcher) Shutdown(ctx context.Context) error {
+	const op = "Shutdown"
+	dispatcher.activeMu.Lock()
+	dispatcher.stopping = true
+	activeRuns := maps.Clone(dispatcher.active)
+	dispatcher.activeMu.Unlock()
+	dispatcher.stop()
+	for runID, active := range activeRuns {
+		select {
+		case <-active.done:
+		case <-ctx.Done():
+			return errors.B.Op(op).Textf("wait for run %q shutdown", runID).Err(ctx.Err()).Build()
+		}
+		if err := dispatcher.interruptStoppedRun(ctx, runID); err != nil {
+			return errors.B.Op(op).Err(err).Build()
+		}
+		dispatcher.activeMu.Lock()
+		delete(dispatcher.active, runID)
+		dispatcher.activeMu.Unlock()
+	}
+	return nil
+}
+
+func (dispatcher *Dispatcher) acceptControl() error {
+	const op = "acceptControl"
+	dispatcher.activeMu.Lock()
+	defer dispatcher.activeMu.Unlock()
+	if dispatcher.stopping {
+		return errors.B.Op(op).KindFailedPrecondition().UserMsg("Alfred is shutting down.").Build()
+	}
+	return nil
+}
+
+func (dispatcher *Dispatcher) interruptStoppedRun(ctx context.Context, runID alfred.RunID) error {
+	const op = "interruptStoppedRun"
+	run, err := dispatcher.runner.runs.GetRun(ctx, runID)
+	if err != nil {
+		return errors.B.Op(op).Textf("get stopped run %q", runID).Err(err).Build()
+	}
+	if run.Status != alfred.RunStatusQueued && run.Status != alfred.RunStatusRunning {
+		return nil
+	}
+	if _, err := dispatcher.runner.events.Append(ctx, alfred.NewRunEvent{
+		RunID: runID, Visibility: alfred.RunEventVisibilityUser,
+		Payload: alfred.RunInterrupted{
+			Reason:  errors.Unavailable.Code,
+			Message: "The service is shutting down. Resume this run after reconnecting.",
+		},
+	}); err != nil {
+		return errors.B.Op(op).Textf("record shutdown interruption for run %q", runID).Err(err).Build()
+	}
+	if err := dispatcher.runner.transitionRun(ctx, runID, run.Status, alfred.RunStatusInterrupted); err != nil {
+		return errors.B.Op(op).Textf("interrupt stopped run %q", runID).Err(err).Build()
+	}
+	return nil
+}
+
 // redispatch waits only for the execution that exposed a durable continuation
 // point. Once a response is stored, request cancellation must not strand it.
 func (dispatcher *Dispatcher) redispatch(runID alfred.RunID) error {
 	const op = "redispatch"
 
 	for {
-		dispatcher.mu.Lock()
+		dispatcher.activeMu.Lock()
 		active := dispatcher.active[runID]
 		if active == nil {
-			dispatcher.mu.Unlock()
+			dispatcher.activeMu.Unlock()
 			return dispatcher.Dispatch(dispatcher.lifetime, runID)
 		}
 		if active.cancelRequested {
 			done := active.done
-			dispatcher.mu.Unlock()
+			dispatcher.activeMu.Unlock()
 			select {
 			case <-done:
 				return errors.B.
@@ -196,7 +274,7 @@ func (dispatcher *Dispatcher) redispatch(runID alfred.RunID) error {
 			}
 		}
 		done := active.done
-		dispatcher.mu.Unlock()
+		dispatcher.activeMu.Unlock()
 
 		select {
 		case <-done:
@@ -212,13 +290,13 @@ func (dispatcher *Dispatcher) completeActiveRun(
 	active *activeRun,
 	result error,
 ) {
-	dispatcher.mu.Lock()
+	dispatcher.activeMu.Lock()
 	active.result = result
-	if dispatcher.active[runID] == active {
+	if !dispatcher.stopping && dispatcher.active[runID] == active {
 		delete(dispatcher.active, runID)
 	}
 	close(active.done)
-	dispatcher.mu.Unlock()
+	dispatcher.activeMu.Unlock()
 }
 
 func (dispatcher *Dispatcher) cancelStoppedRun(ctx context.Context, runID alfred.RunID) error {

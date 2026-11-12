@@ -8,9 +8,13 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"go.uber.org/mock/gomock"
 
+	"github.com/ArionMiles/alfred"
 	alfredv1 "github.com/ArionMiles/alfred/gen/alfred/v1"
 	"github.com/ArionMiles/alfred/gen/alfred/v1/alfredv1connect"
+	"github.com/ArionMiles/alfred/mocks"
+	"github.com/ArionMiles/alfred/pkg/providers"
 	"github.com/ArionMiles/alfred/pkg/transport/rpc"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
@@ -29,9 +33,27 @@ func TestServerPublishesReadyRPCAndCleansUpOnShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Acquire() error = %v", err)
 	}
+	t.Cleanup(func() {
+		if err := owner.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	dispatcher := mocks.NewMockRunDispatcher(gomock.NewController(t))
+	dispatcher.EXPECT().Shutdown(gomock.Any()).Return(nil)
+	setup, err := providers.NewSetupService(nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := mocks.NewMockCloser(gomock.NewController(t))
+	store.EXPECT().Close().DoAndReturn(func() error {
+		if _, err := Acquire(config); errors.WhatKind(err) != errors.Conflict {
+			t.Errorf("storage closed after ownership released: %v", err)
+		}
+		return nil
+	})
 	status := rpc.NewDaemonHandler(owner.InstanceID(), owner.StartedAt())
 	handler := newTestRPCHandler(status)
-	server, err := NewServer(t.Context(), config, owner, handler, status)
+	server, err := NewServer(t.Context(), config, Dependencies{Owner: owner, Handler: handler, Readiness: status, Dispatcher: dispatcher, ProviderSetup: setup, Store: store})
 	if err != nil {
 		_ = owner.Close()
 		t.Fatalf("NewServer() error = %v", err)
@@ -67,6 +89,15 @@ func TestServerPublishesReadyRPCAndCleansUpOnShutdown(t *testing.T) {
 	if err := <-served; err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
+	if _, err := ReadDiscovery(config); err != nil {
+		t.Fatalf("Serve released ownership before Close: %v", err)
+	}
+	if err := server.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := ReadDiscovery(config); errors.WhatKind(err) != errors.NotFound {
 		t.Fatalf("ReadDiscovery() after shutdown error = %v, want not found", err)
 	}
@@ -83,8 +114,26 @@ func TestWildcardListenerPublishesReachableLocalDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := owner.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	dispatcher := mocks.NewMockRunDispatcher(gomock.NewController(t))
+	dispatcher.EXPECT().Shutdown(gomock.Any()).Return(nil)
+	setup, err := providers.NewSetupService(nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := mocks.NewMockCloser(gomock.NewController(t))
+	store.EXPECT().Close().DoAndReturn(func() error {
+		if _, err := Acquire(config); errors.WhatKind(err) != errors.Conflict {
+			t.Errorf("storage closed after ownership released: %v", err)
+		}
+		return nil
+	})
 	status := rpc.NewDaemonHandler(owner.InstanceID(), owner.StartedAt())
-	server, err := NewServer(t.Context(), config, owner, newTestRPCHandler(status), status)
+	server, err := NewServer(t.Context(), config, Dependencies{Owner: owner, Handler: newTestRPCHandler(status), Readiness: status, Dispatcher: dispatcher, ProviderSetup: setup, Store: store})
 	if err != nil {
 		_ = owner.Close()
 		t.Fatal(err)
@@ -95,6 +144,9 @@ func TestWildcardListenerPublishesReachableLocalDiscovery(t *testing.T) {
 	t.Cleanup(func() {
 		cancel()
 		if err := <-served; err != nil {
+			t.Error(err)
+		}
+		if err := server.Close(); err != nil {
 			t.Error(err)
 		}
 	})
@@ -123,8 +175,26 @@ func TestEnsureStartsAndWaitsForDaemon(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		t.Cleanup(func() {
+			if err := owner.Close(); err != nil {
+				t.Error(err)
+			}
+		})
+		dispatcher := mocks.NewMockRunDispatcher(gomock.NewController(t))
+		dispatcher.EXPECT().Shutdown(gomock.Any()).Return(nil)
+		setup, err := providers.NewSetupService(nil, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		store := mocks.NewMockCloser(gomock.NewController(t))
+		store.EXPECT().Close().DoAndReturn(func() error {
+			if _, err := Acquire(config); errors.WhatKind(err) != errors.Conflict {
+				t.Errorf("storage closed after ownership released: %v", err)
+			}
+			return nil
+		})
 		status := rpc.NewDaemonHandler(owner.InstanceID(), owner.StartedAt())
-		server, err := NewServer(t.Context(), config, owner, newTestRPCHandler(status), status)
+		server, err := NewServer(t.Context(), config, Dependencies{Owner: owner, Handler: newTestRPCHandler(status), Readiness: status, Dispatcher: dispatcher, ProviderSetup: setup, Store: store})
 		if err != nil {
 			_ = owner.Close()
 			return err
@@ -133,6 +203,11 @@ func TestEnsureStartsAndWaitsForDaemon(t *testing.T) {
 		serveContext, cancel = context.WithCancel(t.Context())
 		served = make(chan error, 1)
 		go func() { served <- server.Serve(serveContext) }()
+		t.Cleanup(func() {
+			if err := server.Close(); err != nil {
+				t.Error(err)
+			}
+		})
 		return nil
 	})
 	if err != nil {
@@ -182,5 +257,163 @@ func waitForDiscovery(t *testing.T, config Config) Discovery {
 			t.Fatal("daemon did not publish discovery")
 		case <-ticker.C:
 		}
+	}
+}
+
+func TestServerCloseDrainsRequestsBeforeDispatcher(t *testing.T) {
+	t.Parallel()
+	config := Config{DataDir: t.TempDir(), ListenAddress: "127.0.0.1:0", ShutdownTimeout: 20 * time.Millisecond}
+	owner, err := Acquire(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := owner.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	handler := http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		close(started)
+		<-request.Context().Done()
+		close(canceled)
+		<-release
+		close(finished)
+	})
+	dispatcher := mocks.NewMockRunDispatcher(gomock.NewController(t))
+	dispatcher.EXPECT().Shutdown(gomock.Any()).DoAndReturn(func(context.Context) error {
+		select {
+		case <-finished:
+		default:
+			t.Error("dispatcher stopped before RPC writer finished")
+		}
+		return nil
+	})
+	setup, err := providers.NewSetupService(nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := mocks.NewMockCloser(gomock.NewController(t))
+	store.EXPECT().Close().DoAndReturn(func() error {
+		if _, err := Acquire(config); errors.WhatKind(err) != errors.Conflict {
+			t.Errorf("storage closed after ownership released: %v", err)
+		}
+		return nil
+	})
+	status := rpc.NewDaemonHandler(owner.InstanceID(), owner.StartedAt())
+	server, err := NewServer(t.Context(), config, Dependencies{Owner: owner, Handler: handler, Readiness: status, Dispatcher: dispatcher, ProviderSetup: setup, Store: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	served := make(chan error, 1)
+	go func() { served <- server.Serve(ctx) }()
+	waitForDiscovery(t, config)
+	requested := make(chan error, 1)
+	go func() {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.Endpoint(), nil)
+		if err != nil {
+			requested <- err
+			return
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err == nil {
+			err = response.Body.Close()
+		}
+		requested <- err
+	}()
+	<-started
+	cancel()
+	if err := <-served; err != nil {
+		t.Fatal(err)
+	}
+	if err := server.Close(); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Close() = %v, want deadline exceeded", err)
+	}
+	<-canceled
+	if _, err := Acquire(config); errors.WhatKind(err) != errors.Conflict {
+		t.Fatalf("ownership while writer active: %v", err)
+	}
+	close(release)
+	if err := <-requested; err != nil {
+		t.Fatal(err)
+	}
+	if err := server.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServerCloseRetainsStorageUntilProviderWorkflowStops(t *testing.T) {
+	t.Parallel()
+	config := Config{DataDir: t.TempDir(), ListenAddress: "127.0.0.1:0", ShutdownTimeout: 20 * time.Millisecond}
+	owner, err := Acquire(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := owner.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	release := make(chan struct{})
+	stopped := make(chan struct{})
+	authorizer := mocks.NewMockProviderAuthorizer(gomock.NewController(t))
+	authorizer.EXPECT().Authorize(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ alfred.ProviderAuthorizationRequest, publish func(string)) (alfred.ProviderAuthorization, error) {
+		publish("https://example.test/authorize")
+		<-ctx.Done()
+		<-release
+		close(stopped)
+		return alfred.ProviderAuthorization{State: alfred.ProviderAuthorizationCanceled}, nil
+	})
+	setup, err := providers.NewSetupService(nil, nil, nil, providers.WithAuthorizer("example", authorizer))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := setup.Start(t.Context(), alfred.ProviderAuthorizationRequest{Type: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	dispatcher := mocks.NewMockRunDispatcher(gomock.NewController(t))
+	store := mocks.NewMockCloser(gomock.NewController(t))
+	gomock.InOrder(
+		dispatcher.EXPECT().Shutdown(gomock.Any()).DoAndReturn(func(context.Context) error {
+			select {
+			case <-stopped:
+			default:
+				t.Error("dispatcher shutdown preceded provider cleanup")
+			}
+			return nil
+		}),
+		store.EXPECT().Close().DoAndReturn(func() error {
+			if _, err := Acquire(config); errors.WhatKind(err) != errors.Conflict {
+				t.Errorf("ownership released before storage: %v", err)
+			}
+			return nil
+		}),
+	)
+	status := rpc.NewDaemonHandler(owner.InstanceID(), owner.StartedAt())
+	server, err := NewServer(t.Context(), config, Dependencies{Owner: owner, Handler: newTestRPCHandler(status), Readiness: status, Dispatcher: dispatcher, ProviderSetup: setup, Store: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := server.Close(); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Close with active provider writer = %v", err)
+	}
+	if _, err := Acquire(config); errors.WhatKind(err) != errors.Conflict {
+		t.Fatalf("ownership released under active workflow: %v", err)
+	}
+	close(release)
+	if err := server.Close(); err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := Acquire(config)
+	if err != nil {
+		t.Fatalf("Close retained ownership after writers stopped: %v", err)
+	}
+	if err := replacement.Close(); err != nil {
+		t.Fatal(err)
 	}
 }

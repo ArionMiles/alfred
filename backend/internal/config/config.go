@@ -27,16 +27,26 @@ import (
 // C composes startup settings. Only fields with public koanf tags are file settings.
 // Composition supplies derived component paths when constructing dependencies.
 type C struct {
-	ConfigDir           string                     `koanf:"-"`
-	DataDir             string                     `koanf:"data_dir"`
-	Daemon              daemon.Config              `koanf:",squash"`
-	Tools               tools.Config               `koanf:"tools"`
-	TUI                 tui.Config                 `koanf:"tui"`
-	SQLite              sqlite.Config              `koanf:"-"`
-	History             jsonl.Config               `koanf:"-"`
-	Skills              skills.Config              `koanf:"-"`
-	Catalog             providers.CatalogConfig    `koanf:"-"`
-	OpenAIAuthorization openai.AuthorizationConfig `koanf:"-"`
+	ConfigDir string                  `koanf:"-"`
+	DataDir   string                  `koanf:"data_dir"`
+	Daemon    daemon.Config           `koanf:",squash"`
+	Tools     tools.Config            `koanf:"tools"`
+	TUI       tui.Config              `koanf:"tui"`
+	SQLite    sqlite.Config           `koanf:"-"`
+	History   jsonl.Config            `koanf:"-"`
+	Skills    skills.Config           `koanf:"-"`
+	Catalog   providers.CatalogConfig `koanf:"-"`
+	Providers ProviderConfig          `koanf:"providers"`
+}
+
+// ProviderConfig contains installed provider startup settings, not saved accounts.
+type ProviderConfig struct {
+	OpenAI OpenAIConfig `koanf:"openai"`
+}
+
+// OpenAIConfig exposes the supported OpenAI onboarding settings.
+type OpenAIConfig struct {
+	Authorization openai.AuthorizationConfig `koanf:"authorization"`
 }
 
 // Load applies defaults, config.toml and cli.toml, then explicit environment overrides.
@@ -123,6 +133,7 @@ func Load() (C, error) {
 		Tag: "koanf",
 		DecoderConfig: &mapstructure.DecoderConfig{
 			ErrorUnused: true, WeaklyTypedInput: false, ZeroFields: false,
+			DecodeHook: mapstructure.StringToTimeDurationHookFunc(),
 		},
 	}); err != nil {
 		return C{}, errors.B.Op(op).Textf("decode configuration from %q and %q", path, clientPath).Err(err).Build()

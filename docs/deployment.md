@@ -43,7 +43,7 @@ in the data volume.
 Run the bundled TUI inside the running container:
 
 ```sh
-docker compose exec alfred alfred
+docker compose exec alfred alfred tui
 ```
 
 The TUI discovers the existing daemon using their shared data directory and

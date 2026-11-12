@@ -393,7 +393,7 @@
       <ul>
         <li><strong>Approval:</strong> ResolveApproval records a digest-bound decision before redispatch. Denial becomes a tool error result; approval is evaluated again through policy.</li>
         <li><strong>AskUser:</strong> a tool returns an input prompt. The runner records InputRequested and waits. ProvideInput records the answer, which satisfies that tool call during replay.</li>
-        <li><strong>Interruption:</strong> retryable model-stream errors record a safe reason. ResumeRun accepts interrupted runs and uses their original model.</li>
+        <li><strong>Interruption:</strong> graceful service shutdown stops active writers before marking queued or running executions interrupted. Durable waits and terminal states remain unchanged. Retryable model-stream errors record a safe reason. ResumeRun accepts interrupted runs and uses their original model.</li>
         <li><strong>Presentation:</strong> answer and readable-reasoning deltas are provisional. Clients reconcile completed output and never receive native replay fragments.</li>
       </ul>
       <p class="callout"><strong>Current limits:</strong> the default application allows tools without approval prompts. SDK policy can require approval. Service startup does not automatically redispatch unfinished runs, and a crash between an external tool effect and recording its result can leave an effect that replay cannot identify as complete. Cancellation stops execution; it does not undo effects.</p>

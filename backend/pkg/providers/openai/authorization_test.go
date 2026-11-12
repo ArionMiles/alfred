@@ -2,6 +2,7 @@ package openai_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -23,6 +24,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ArionMiles/alfred"
+	"github.com/ArionMiles/alfred/pkg/providers"
 	"github.com/ArionMiles/alfred/pkg/providers/openai"
 	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
@@ -59,7 +61,7 @@ func TestAuthorizationSavesValidatedConnection(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("callback status = %d", response.StatusCode)
 	}
-	result, err := service.Get(t.Context(), authorization.ID)
+	result, err := waitForAuthorization(t, service, authorization.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +190,7 @@ func TestAuthorizationRetainsIdentityWithoutDirectTokenScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = response.Body.Close()
-	result, err := service.Get(t.Context(), authorization.ID)
+	result, err := waitForAuthorization(t, service, authorization.ID)
 	if err != nil || result.State != alfred.ProviderAuthorizationCompleted {
 		t.Fatalf("result = %#v, error = %v", result, err)
 	}
@@ -230,7 +232,9 @@ func TestAuthorizationHostIDSurvivesServiceRestart(t *testing.T) {
 			t.Fatalf("host ID changed from %q to %q", previous, hostID)
 		}
 		previous = hostID
-		service.Close()
+		if err := service.Shutdown(t.Context()); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -310,7 +314,7 @@ func TestAuthorizationCallbackCoordinatesPollingCancellationAndDuplicate(t *test
 			case <-time.After(5 * time.Second):
 				t.Fatal("callback did not finish")
 			}
-			result, err = service.Get(t.Context(), authorization.ID)
+			result, err = waitForAuthorization(t, service, authorization.ID)
 			if err != nil || result.State != wantState || fixture.tokenRequests.Load() != 1 {
 				t.Fatalf("result = %#v, error = %v, token requests = %d", result, err, fixture.tokenRequests.Load())
 			}
@@ -360,7 +364,9 @@ func TestReauthorizationReusesRegistrationAndPreservesConnectionOnFailure(t *tes
 					t.Fatal(err)
 				}
 			}
-			service.Close()
+			if err := service.Shutdown(t.Context()); err != nil {
+				t.Fatal(err)
+			}
 			service = newAuthorizationService(t, fixture, store, openai.WithSuccessHTML("CUSTOM SUCCESS"))
 			next, err := service.Start(t.Context(), request)
 			if err != nil {
@@ -437,7 +443,7 @@ func TestReauthorizationReusesRegistrationAndPreservesConnectionOnFailure(t *tes
 					t.Fatalf("success body = %s", body)
 				}
 			}
-			result, err := service.Get(t.Context(), next.ID)
+			result, err := waitForAuthorization(t, service, next.ID)
 			if err != nil || result.State != wantState {
 				t.Fatalf("result = %#v, error = %v", result, err)
 			}
@@ -639,16 +645,118 @@ func getAuthorizationURL(t *testing.T, address string) (*http.Response, error) {
 	return http.DefaultClient.Do(request)
 }
 
-func newAuthorizationService(t *testing.T, fixture *oauthFixture, store *sqlite.Store, options ...openai.AuthorizationOption) *openai.AuthorizationService {
+func newAuthorizationService(t *testing.T, fixture *oauthFixture, store *sqlite.Store, options ...openai.AuthorizationOption) *providers.SetupService {
 	t.Helper()
 	config := withDefaults[openai.AuthorizationConfig]()
 	config.Issuer = fixture.server.URL
 	config.AuthorizeURL = fixture.server.URL + "/authorize"
 	config.TokenURL = fixture.server.URL + "/token"
 	options = append([]openai.AuthorizationOption{openai.WithAuthorizationHTTPClient(fixture.server.Client())}, options...)
-	service := openai.NewAuthorizationService(t.Context(), config, openai.AuthorizationDependencies{
-		Store: store, Credentials: store,
-	}, options...)
-	t.Cleanup(service.Close)
+	service, err := providers.NewSetupService(providers.SetupDefinitions(), store, store,
+		providers.WithAuthorizer("openai", openai.NewAuthorizer(config, openai.AuthorizationDependencies{Store: store, Credentials: store}, options...)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := service.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
 	return service
+}
+
+func waitForAuthorization(t *testing.T, service *providers.SetupService, id alfred.ProviderAuthorizationID) (alfred.ProviderAuthorization, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		result, err := service.Get(ctx, id)
+		if err != nil || result.State != alfred.ProviderAuthorizationPending {
+			return result, err
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatal("authorization did not finish")
+			return alfred.ProviderAuthorization{}, ctx.Err()
+		}
+	}
+}
+
+func TestAuthorizationAttemptExpiresAndClosesListener(t *testing.T) {
+	t.Parallel()
+	fixture := newOAuthFixture(t, true)
+	store := newAuthorizationStore(t)
+	config := withDefaults[openai.AuthorizationConfig]()
+	config.AuthorizeURL = fixture.server.URL + "/authorize"
+	config.AttemptTimeout = 100 * time.Millisecond
+	service, err := providers.NewSetupService(providers.SetupDefinitions(), store, store,
+		providers.WithAuthorizer("openai", openai.NewAuthorizer(config, openai.AuthorizationDependencies{Store: store, Credentials: store})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := service.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	authorization, err := service.Start(t.Context(), alfred.ProviderAuthorizationRequest{Type: "openai", MethodID: "chatgpt-subscription"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := url.Parse(authorization.AuthorizationURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := waitForAuthorization(t, service, authorization.ID)
+	if err != nil || result.State != alfred.ProviderAuthorizationFailed || !strings.Contains(result.Message, "expired") || result.AuthorizationURL != "" {
+		t.Fatalf("expired result = %#v, %v", result, err)
+	}
+	response, err := getAuthorizationURL(t, endpoint.Query().Get("redirect_uri"))
+	if err == nil {
+		_ = response.Body.Close()
+		t.Fatal("expired attempt left callback listener open")
+	}
+	if _, err := store.GetProviderInstance(t.Context(), "openai"); errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("expired attempt saved provider: %v", err)
+	}
+}
+
+func TestAuthorizationReportsTokenTimeoutAsFailure(t *testing.T) {
+	t.Parallel()
+	fixture := newOAuthFixture(t, true)
+	fixture.tokenStarted = make(chan struct{}, 1)
+	fixture.tokenRelease = make(chan struct{})
+	defer close(fixture.tokenRelease)
+	store := newAuthorizationStore(t)
+	config := withDefaults[openai.AuthorizationConfig]()
+	config.Issuer = fixture.server.URL
+	config.AuthorizeURL = fixture.server.URL + "/authorize"
+	config.TokenURL = fixture.server.URL + "/token"
+	config.RequestTimeout = 20 * time.Millisecond
+	service, err := providers.NewSetupService(providers.SetupDefinitions(), store, store,
+		providers.WithAuthorizer("openai", openai.NewAuthorizer(config, openai.AuthorizationDependencies{Store: store, Credentials: store}, openai.WithAuthorizationHTTPClient(fixture.server.Client()))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := service.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	authorization, err := service.Start(t.Context(), alfred.ProviderAuthorizationRequest{Type: "openai", MethodID: "chatgpt-subscription"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := completeFixtureAuthorization(t, fixture, authorization)
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusBadGateway {
+		t.Fatalf("token timeout status = %d", response.StatusCode)
+	}
+	result, err := waitForAuthorization(t, service, authorization.ID)
+	if err != nil || result.State != alfred.ProviderAuthorizationFailed || !strings.Contains(result.Message, "token exchange failed") {
+		t.Fatalf("token timeout result = %#v, %v", result, err)
+	}
 }

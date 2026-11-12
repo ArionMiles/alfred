@@ -327,7 +327,7 @@ func TestOpenAIResolverRequiresOpenAIModelMetadata(t *testing.T) {
 func newResolverSetup(t *testing.T) (*sqlite.Store, *providers.Submitter) {
 	t.Helper()
 	store := newAuthorizationStore(t)
-	setup, err := providers.NewSetupService(providers.SetupDefinitions())
+	setup, err := providers.NewSetupService(providers.SetupDefinitions(), store, store)
 	if err != nil {
 		t.Fatal(err)
 	}

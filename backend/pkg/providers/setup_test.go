@@ -9,7 +9,7 @@ import (
 
 func TestPrepareFormPreservesSettingsAndOmitsSecrets(t *testing.T) {
 	t.Parallel()
-	service, err := NewSetupService(SetupDefinitions())
+	service, err := NewSetupService(SetupDefinitions(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestPrepareFormPreservesSettingsAndOmitsSecrets(t *testing.T) {
 func TestPreparedFormCannotMutateRegisteredDefinitions(t *testing.T) {
 	t.Parallel()
 	definitions := SetupDefinitions()
-	service, err := NewSetupService(definitions)
+	service, err := NewSetupService(definitions, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestPreparedFormCannotMutateRegisteredDefinitions(t *testing.T) {
 
 func TestPrepareFormRejectsUnknownMethodAndMismatchedInstance(t *testing.T) {
 	t.Parallel()
-	service, err := NewSetupService(SetupDefinitions())
+	service, err := NewSetupService(SetupDefinitions(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

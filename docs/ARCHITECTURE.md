@@ -33,7 +33,9 @@ that observes multiple moments, such as streaming measurements and network token
 renewal, reads current time at each observation rather than reusing an earlier
 timestamp for the whole operation.
 
-Application startup resolves one aggregate configuration before composition.
+Command discovery and usage remain available without valid application
+configuration. Executable commands resolve one aggregate configuration before
+composition.
 Static defaults live on the owning settings structs and are applied before
 file values and explicitly named environment overrides. Loading resolves the
 application's configuration and data directories; composition supplies component
@@ -64,6 +66,19 @@ A conversation should survive closing a terminal or reconnecting through a
 different client. Clients therefore submit work and observe it through a service
 contract; their connections do not own execution lifetime. Waiting for a person's
 answer or approval must also survive the original request ending.
+
+The dispatcher owns execution cancellation independently of request and process
+signal contexts. Shutdown first stops RPC admission and cancels streaming request
+contexts, then drains handlers before stopping the dispatcher. The dispatcher
+waits for execution writers before recording queued or running work as
+interrupted; durable pauses and terminal states retain their meaning. A shutdown
+deadline bounds this work. If draining fails, shared storage and daemon ownership
+remain open rather than being released under active writers.
+
+The daemon owns shutdown ordering: drain RPCs, cancel and wait for provider
+onboarding, stop dispatched runs, close shared storage, then release ownership.
+Ownership is released last so another process cannot acquire the data directory
+while this process still writes it.
 
 This decision introduces daemon discovery and client synchronization that an
 in-process terminal application could avoid. The shared HTTP contract accepts
@@ -102,8 +117,20 @@ middleware. Catalog loading and caching remain provider-neutral; a concrete
 resolver decides which published metadata it requires. Composition connects
 these boundaries without making the catalog depend on an installed adapter.
 
+Provider setup owns asynchronous onboarding attempts and their safe polling
+results. A concrete authorizer runs a scoped operation and returns only after
+its callback handlers and credential writes have stopped. OpenAI bounds the
+whole attempt, including waiting for a browser, and releases its listener on
+completion, denial, failure, cancellation, or expiry. Cancellation signals work
+to stop; the setup service's shutdown waits for completion before storage can
+close. Completed polling results do not retain callback execution resources.
+Onboarding remains independent of inference adapter lifetimes and RPC handlers.
+SDK users can run the scoped operation directly or compose the setup service
+without adopting a daemon.
+
 OAuth callback presentation is a composition choice owned by the authorization
-service. SDK applications can supply static success HTML and their agent name;
+implementation. SDK applications can supply static success HTML and their agent
+name;
 clients and file configuration do not interpret those choices. Custom HTML is
 served only after validated credentials and plan permission are saved, so
 presentation cannot establish authorization success or hide a declined grant.

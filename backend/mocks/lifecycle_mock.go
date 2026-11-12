@@ -205,6 +205,44 @@ func (c *MockRunDispatcherDispatchCall) DoAndReturn(f func(context.Context, alfr
 	return c
 }
 
+// Shutdown mocks base method.
+func (m *MockRunDispatcher) Shutdown(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Shutdown", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Shutdown indicates an expected call of Shutdown.
+func (mr *MockRunDispatcherMockRecorder) Shutdown(arg0 any) *MockRunDispatcherShutdownCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Shutdown", reflect.TypeOf((*MockRunDispatcher)(nil).Shutdown), arg0)
+	return &MockRunDispatcherShutdownCall{Call: call}
+}
+
+// MockRunDispatcherShutdownCall wrap *gomock.Call
+type MockRunDispatcherShutdownCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockRunDispatcherShutdownCall) Return(arg0 error) *MockRunDispatcherShutdownCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockRunDispatcherShutdownCall) Do(f func(context.Context) error) *MockRunDispatcherShutdownCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockRunDispatcherShutdownCall) DoAndReturn(f func(context.Context) error) *MockRunDispatcherShutdownCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // MockInvocationService is a mock of InvocationService interface.
 type MockInvocationService struct {
 	ctrl     *gomock.Controller

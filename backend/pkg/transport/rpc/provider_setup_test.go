@@ -120,7 +120,7 @@ func TestProviderSetupRPCEncodesSelectFieldsAndRejectsInvalidChoice(t *testing.T
 
 func TestProviderSetupHandlerRejectsNilRequests(t *testing.T) {
 	t.Parallel()
-	handler := NewProviderSetupHandler(nil, nil, nil, nil)
+	handler := NewProviderSetupHandler(nil)
 	_, listErr := handler.ListProviderDefinitions(t.Context(), nil)
 	_, prepareErr := handler.PrepareProviderSetup(t.Context(), nil)
 	_, submitErr := handler.SubmitProviderSetup(t.Context(), nil)
@@ -142,16 +142,15 @@ func newProviderSetupTestClient(t *testing.T, definitions []alfred.ProviderDefin
 			t.Error(err)
 		}
 	})
-	setup, err := providers.NewSetupService(definitions)
+	setup, err := providers.NewSetupService(definitions, store, store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	submitter := providers.NewSubmitter(setup, store)
 	server := httptest.NewServer(NewServer(Handlers{
 		Models: alfredv1connect.UnimplementedModelServiceHandler{},
 		Daemon: alfredv1connect.UnimplementedDaemonServiceHandler{}, Project: alfredv1connect.UnimplementedProjectServiceHandler{},
 		Invocation: alfredv1connect.UnimplementedInvocationServiceHandler{}, Session: alfredv1connect.UnimplementedSessionServiceHandler{},
-		Run: alfredv1connect.UnimplementedRunServiceHandler{}, ProviderSetup: NewProviderSetupHandler(setup, submitter, store, nil),
+		Run: alfredv1connect.UnimplementedRunServiceHandler{}, ProviderSetup: NewProviderSetupHandler(setup),
 	}))
 	t.Cleanup(server.Close)
 	return NewClients(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))).ProviderSetup, store

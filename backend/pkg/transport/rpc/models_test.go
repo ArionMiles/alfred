@@ -146,7 +146,7 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
   }}}`)
 	}))
 	t.Cleanup(source.Close)
-	setup, err := providers.NewSetupService(providers.SetupDefinitions())
+	setup, err := providers.NewSetupService(providers.SetupDefinitions(), store, store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
 	server := httptest.NewServer(NewServer(Handlers{
 		Models: NewModelHandler(modelService), Invocation: NewInvocationHandler(invocations),
 		Daemon: alfredv1connect.UnimplementedDaemonServiceHandler{}, Project: alfredv1connect.UnimplementedProjectServiceHandler{},
-		Session: alfredv1connect.UnimplementedSessionServiceHandler{}, Run: alfredv1connect.UnimplementedRunServiceHandler{}, ProviderSetup: NewProviderSetupHandler(setup, submitter, store, nil),
+		Session: alfredv1connect.UnimplementedSessionServiceHandler{}, Run: alfredv1connect.UnimplementedRunServiceHandler{}, ProviderSetup: NewProviderSetupHandler(setup),
 	}))
 	t.Cleanup(server.Close)
 	return NewClients(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL))), store

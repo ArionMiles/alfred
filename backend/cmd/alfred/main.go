@@ -33,12 +33,6 @@ import (
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
-type application struct {
-	server                *daemon.Server
-	store                 *sqlite.Store
-	providerAuthorization *openaiAuthorization.AuthorizationService
-}
-
 func main() {
 	os.Exit(exitCode())
 }
@@ -57,33 +51,29 @@ func exitCode() int {
 func run(ctx context.Context, arguments []string) error {
 	const op = "run"
 
-	if len(arguments) > 1 || (len(arguments) == 1 && arguments[0] != "serve") {
-		return errors.B.Op(op).KindInvalidArgument().UserMsg("usage: alfred [serve]").Build()
-	}
-	settings, err := config.Load()
-	if err != nil {
+	command := newRootCommand()
+	command.SetArgs(arguments)
+	command.SetOut(os.Stdout)
+	command.SetErr(os.Stderr)
+	if err := command.ExecuteContext(ctx); err != nil {
 		return errors.B.Op(op).Err(err).Build()
-	}
-	if len(arguments) == 1 {
-		if err := runService(ctx, settings); err != nil {
-			return errors.B.Op(op).Text("run Alfred service").Err(err).Build()
-		}
-		return nil
-	}
-	if err := runClient(ctx, settings); err != nil {
-		return errors.B.Op(op).Text("run Alfred client").Err(err).Build()
 	}
 	return nil
 }
 
-func runService(ctx context.Context, settings config.C) error {
-	const op = "runService"
+func serve(ctx context.Context, settings config.C) (err error) {
+	const op = "serve"
 
-	app, err := compose(ctx, settings)
+	server, err := compose(ctx, settings)
 	if err != nil {
 		return errors.B.Op(op).Err(err).Build()
 	}
-	if err := app.Serve(ctx); err != nil {
+	defer func() {
+		if closeErr := server.Close(); closeErr != nil {
+			err = errors.B.Op(op).Err(err).Err(closeErr).Build()
+		}
+	}()
+	if err := server.Serve(ctx); err != nil {
 		return errors.B.Op(op).Err(err).Build()
 	}
 	return nil
@@ -108,7 +98,7 @@ func runClient(ctx context.Context, settings config.C) error {
 	return nil
 }
 
-func compose(ctx context.Context, settings config.C) (app *application, err error) {
+func compose(ctx context.Context, settings config.C) (server *daemon.Server, err error) {
 	const op = "compose"
 
 	daemonConfig := settings.Daemon
@@ -119,7 +109,7 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 	}
 	defer func() {
 		if err == nil {
-			return // Successful composition transfers ownership to the application.
+			return // Successful composition transfers ownership to the daemon server.
 		}
 		if closeErr := owner.Close(); closeErr != nil {
 			err = errors.B.Op(op).Text("release daemon ownership after failed composition").Err(err).Err(closeErr).Build()
@@ -167,7 +157,7 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 		providers.WithConfiguredProviders(openaiAuthorization.NewResolver(
 			store, store,
 			openaiAuthorization.NewSubscriptionCredentials(
-				store, settings.OpenAIAuthorization,
+				store, settings.Providers.OpenAI.Authorization,
 			),
 			providers.NewCatalogSource(settings.Catalog, settings.DataDir),
 		)),
@@ -193,7 +183,7 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 		EventReader: eventStore,
 		Broadcaster: broker,
 	})
-	dispatcher := agent.NewDispatcher(ctx, runner)
+	dispatcher := agent.NewDispatcher(runner)
 	invocationService := invocation.NewService(
 		invocation.Dependencies{
 			ModelSelection: store,
@@ -206,23 +196,12 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 		},
 	)
 	projectService := project.NewService(store)
-	providerSetup, err := providers.NewSetupService(providers.SetupDefinitions())
+	providerSetup, err := providers.NewSetupService(providers.SetupDefinitions(), store, store,
+		providers.WithAuthorizer("openai", openaiAuthorization.NewAuthorizer(settings.Providers.OpenAI.Authorization,
+			openaiAuthorization.AuthorizationDependencies{Store: store, Credentials: store})))
 	if err != nil {
 		return nil, errors.B.Op(op).Text("create provider setup service").Err(err).Build()
 	}
-	providerSubmitter := providers.NewSubmitter(providerSetup, store)
-	providerAuthorization := openaiAuthorization.NewAuthorizationService(
-		ctx,
-		settings.OpenAIAuthorization,
-		openaiAuthorization.AuthorizationDependencies{
-			Store: store, Credentials: store,
-		},
-	)
-	defer func() {
-		if err != nil {
-			providerAuthorization.Close()
-		}
-	}()
 	modelService := providers.NewModelService(store, providerRegistry, store)
 	status := rpc.NewDaemonHandler(owner.InstanceID(), owner.StartedAt())
 	handler := rpc.NewServer(rpc.Handlers{
@@ -232,26 +211,17 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 		Invocation:    rpc.NewInvocationHandler(invocationService),
 		Session:       rpc.NewSessionHandler(store, eventStore, broker),
 		Run:           rpc.NewRunHandler(store, dispatcher),
-		ProviderSetup: rpc.NewProviderSetupHandler(providerSetup, providerSubmitter, store, providerAuthorization),
+		ProviderSetup: rpc.NewProviderSetupHandler(providerSetup),
 		Models:        rpc.NewModelHandler(modelService),
 	})
-	server, err := daemon.NewServer(ctx, daemonConfig, owner, handler, status)
+	server, err = daemon.NewServer(ctx, daemonConfig, daemon.Dependencies{
+		Owner: owner, Handler: handler, Readiness: status,
+		Dispatcher: dispatcher, ProviderSetup: providerSetup, Store: store,
+	})
 	if err != nil {
 		return nil, errors.B.Op(op).Text("create daemon server").Err(err).Build()
 	}
-	return &application{server: server, store: store, providerAuthorization: providerAuthorization}, nil
-}
-
-func (app *application) Serve(ctx context.Context) error {
-	const op = "Serve"
-
-	serveErr := app.server.Serve(ctx)
-	app.providerAuthorization.Close()
-	closeErr := app.store.Close()
-	if serveErr != nil || closeErr != nil {
-		return errors.B.Op(op).Err(serveErr).Err(closeErr).Build()
-	}
-	return nil
+	return server, nil
 }
 
 func startServiceProcess() error {

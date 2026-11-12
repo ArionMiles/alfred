@@ -79,6 +79,7 @@ tasks:
             -package=mocks \
             -typed
         done
+      - go tool mockgen -destination=mocks/io_mock.go -package=mocks -typed io Closer
       - go tool mockgen -source=pkg/tools/web.go -destination=mocks/search_mock.go -package=mocks -typed -exclude_interfaces=searchSettingsReader
   proto:generate:
     desc: Generate Go and Connect code from Protobuf schemas
@@ -130,7 +131,7 @@ tasks:
         esac
         go -C backend build -ldflags '{{.LDFLAGS}}' -o "$output" ./cmd/alfred
   dev:
-    desc: Build and run Alfred normally (task dev -- --force restarts its server)
+    desc: Build and open the TUI (task dev -- --force restarts its server)
     vars:
       DATA_DIR: '{{default "/tmp/alfred-dev-data" .DATA_DIR}}'
       OUTPUT: '{{default "/tmp/alfred-dev" .OUTPUT}}'
@@ -175,7 +176,7 @@ tasks:
           fi
         fi
         unset DEV_ARGS DEV_BINARY DEV_DATA_DIR
-        exec "$binary"
+        exec "$binary" tui
   audit:
     desc: Check known vulnerabilities
     cmds: [go -C backend tool govulncheck ./...]

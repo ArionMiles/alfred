@@ -225,7 +225,7 @@ func TestRunnerResumeRunIgnoresToolCallsFromFailedModelCall(t *testing.T) {
 			CallID: "model-call-1", Outcome: alfred.ModelCallOutcomeFailed,
 		}}},
 	}
-	dispatcher := NewDispatcher(t.Context(), fixture.runner())
+	dispatcher := newTestDispatcher(t, fixture.runner())
 
 	if err := dispatcher.ResumeRun(t.Context(), run.ID); err != nil {
 		t.Fatalf("ResumeRun() error = %v", err)
@@ -245,7 +245,7 @@ func TestRunnerResumeRunRejectsRunThatIsNotInterrupted(t *testing.T) {
 	run := testRun(testModel().Ref)
 	run.Status = alfred.RunStatusCompleted
 	fixture := newRunnerFixture(t, run, testModel())
-	err := NewDispatcher(t.Context(), fixture.runner()).ResumeRun(t.Context(), run.ID)
+	err := newTestDispatcher(t, fixture.runner()).ResumeRun(t.Context(), run.ID)
 	if kind := errors.WhatKind(err); kind != errors.Conflict {
 		t.Fatalf("errors.WhatKind(error) = %#v, want %#v", kind, errors.Conflict)
 	}
@@ -271,7 +271,7 @@ func TestDispatcherOwnsActiveRunLifetimeAndCancellation(t *testing.T) {
 		close(cancellationEvent)
 		<-releaseCancellationEvent
 	}
-	dispatcher := NewDispatcher(t.Context(), fixture.runner())
+	dispatcher := newTestDispatcher(t, fixture.runner())
 	requestContext, cancelRequest := context.WithCancel(t.Context())
 	if err := dispatcher.Dispatch(requestContext, run.ID); err != nil {
 		t.Fatalf("Dispatch() error = %v", err)
@@ -422,7 +422,7 @@ func TestRunnerResumesApprovedToolCallWithGrant(t *testing.T) {
 		}, nil
 	})
 	fixture.dependencies.Executor = executor
-	dispatcher := NewDispatcher(t.Context(), fixture.runner())
+	dispatcher := newTestDispatcher(t, fixture.runner())
 	previousExecution := &activeRun{done: make(chan struct{})}
 	dispatcher.active[run.ID] = previousExecution
 	resolved := make(chan error, 1)
@@ -437,10 +437,10 @@ func TestRunnerResumesApprovedToolCallWithGrant(t *testing.T) {
 		t.Fatalf("ResolveApproval() returned before prior execution finished: %v", err)
 	default:
 	}
-	dispatcher.mu.Lock()
+	dispatcher.activeMu.Lock()
 	delete(dispatcher.active, run.ID)
 	close(previousExecution.done)
-	dispatcher.mu.Unlock()
+	dispatcher.activeMu.Unlock()
 	if err := <-resolved; err != nil {
 		t.Fatalf("ResolveApproval() error = %v", err)
 	}
@@ -462,7 +462,7 @@ func TestRunnerResumesAfterDeniedApprovalWithoutExecutingTool(t *testing.T) {
 	fixture := newRunnerFixture(t, run, model)
 	fixture.events.events = pendingApprovalEvents(run.ID, call, request)
 	fixture.dependencies.Executor = mocks.NewMockExecutor(fixture.controller)
-	dispatcher := NewDispatcher(t.Context(), fixture.runner())
+	dispatcher := newTestDispatcher(t, fixture.runner())
 
 	if err := dispatcher.ResolveApproval(t.Context(), run.ID, alfred.ApprovalResolution{
 		ApprovalID: request.ID, Outcome: alfred.ApprovalOutcomeDenied,
@@ -490,7 +490,7 @@ func TestRunnerResumesWithRequestedUserInput(t *testing.T) {
 		RequestID: request.ID,
 		Content:   []alfred.ContentPart{alfred.TextContent{Text: "Use Friday"}},
 	}
-	dispatcher := NewDispatcher(t.Context(), fixture.runner())
+	dispatcher := newTestDispatcher(t, fixture.runner())
 
 	if err := dispatcher.ProvideInput(t.Context(), run.ID, response); err != nil {
 		t.Fatalf("ProvideInput() error = %v", err)
@@ -522,7 +522,7 @@ func TestRunnerResumesWithRequestedToolInputAsToolResult(t *testing.T) {
 		RequestID: request.ID,
 		Content:   []alfred.ContentPart{alfred.TextContent{Text: "Friday"}},
 	}
-	dispatcher := NewDispatcher(t.Context(), fixture.runner())
+	dispatcher := newTestDispatcher(t, fixture.runner())
 
 	if err := dispatcher.ProvideInput(t.Context(), run.ID, response); err != nil {
 		t.Fatalf("ProvideInput() error = %v", err)
@@ -854,9 +854,9 @@ func waitForInactive(t *testing.T, dispatcher *Dispatcher, runID alfred.RunID) {
 	ticker := time.NewTicker(time.Millisecond)
 	defer ticker.Stop()
 	for {
-		dispatcher.mu.Lock()
+		dispatcher.activeMu.Lock()
 		_, active := dispatcher.active[runID]
-		dispatcher.mu.Unlock()
+		dispatcher.activeMu.Unlock()
 		if !active {
 			return
 		}

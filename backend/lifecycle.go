@@ -120,6 +120,9 @@ type AgentRunner interface {
 // service. Dispatch returns after the run has been accepted, not after it ends.
 type RunDispatcher interface {
 	Dispatch(context.Context, RunID) error
+	// Shutdown stops admission, cancels executions, and settles their durable state.
+	// Invocation sources must finish their in-flight control requests before calling it.
+	Shutdown(context.Context) error
 }
 
 // InvocationService creates and dispatches runs using the supplied creation time.

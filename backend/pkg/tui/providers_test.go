@@ -11,10 +11,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectinprocess"
+	"go.uber.org/mock/gomock"
 
 	"github.com/ArionMiles/alfred"
 	alfredv1 "github.com/ArionMiles/alfred/gen/alfred/v1"
 	"github.com/ArionMiles/alfred/gen/alfred/v1/alfredv1connect"
+	"github.com/ArionMiles/alfred/mocks"
 	"github.com/ArionMiles/alfred/pkg/providers"
 	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
 	"github.com/ArionMiles/alfred/pkg/transport/rpc"
@@ -198,14 +200,14 @@ func TestProviderAuthorizationOpensBrowserAndCompletes(t *testing.T) {
 	starting, start := model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	started, _ := starting.(Model).Update(start())
 	model = started.(Model)
-	if openedURL != "https://auth.example.test/authorize" || model.providers.authorization.GetId() != "authorization-1" ||
+	if openedURL != "https://auth.example.test/authorize" || model.providers.authorization.GetId() == "" ||
 		!strings.Contains(model.View().Content, openedURL) {
 		t.Fatalf("authorization was not opened and displayed: %q", model.View().Content)
 	}
 	completed, _ := model.Update(providerAuthorizationPollMsg{
 		setup: model.providers,
 		authorization: &alfredv1.ProviderAuthorization{
-			Id: "authorization-1", State: alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_COMPLETED,
+			Id: model.providers.authorization.GetId(), State: alfredv1.ProviderAuthorizationState_PROVIDER_AUTHORIZATION_STATE_COMPLETED,
 			Message: "OpenAI account connected.", AccountLabel: "person@example.test",
 		},
 	})
@@ -218,8 +220,6 @@ func TestProviderAuthorizationOpensBrowserAndCompletes(t *testing.T) {
 		t.Fatal("completed authorization did not close")
 	}
 }
-
-type providerAuthorizerStub struct{}
 
 func TestProviderAuthorizationPollRecoversAfterDaemonRestart(t *testing.T) {
 	t.Parallel()
@@ -261,33 +261,6 @@ func TestProviderAuthorizationPollRecoversAfterDaemonRestart(t *testing.T) {
 	}
 }
 
-func (*providerAuthorizerStub) Start(
-	context.Context,
-	alfred.ProviderAuthorizationRequest,
-) (alfred.ProviderAuthorization, error) {
-	return alfred.ProviderAuthorization{
-		ID: "authorization-1", State: alfred.ProviderAuthorizationPending,
-		AuthorizationURL: "https://auth.example.test/authorize",
-	}, nil
-}
-
-func (*providerAuthorizerStub) Get(
-	context.Context,
-	alfred.ProviderAuthorizationID,
-) (alfred.ProviderAuthorization, error) {
-	return alfred.ProviderAuthorization{
-		ID: "authorization-1", State: alfred.ProviderAuthorizationCompleted,
-		AccountLabel: "person@example.test", Message: "OpenAI account connected.",
-	}, nil
-}
-
-func (*providerAuthorizerStub) Cancel(
-	context.Context,
-	alfred.ProviderAuthorizationID,
-) (alfred.ProviderAuthorization, error) {
-	return alfred.ProviderAuthorization{ID: "authorization-1", State: alfred.ProviderAuthorizationCanceled}, nil
-}
-
 func newProviderTestModel(t *testing.T) (Model, *sqlite.Store) {
 	t.Helper()
 	store, err := sqlite.Open(t.Context(), sqlite.Config{Path: filepath.Join(t.TempDir(), "alfred.db"), BusyTimeout: time.Second})
@@ -299,13 +272,23 @@ func newProviderTestModel(t *testing.T) (Model, *sqlite.Store) {
 			t.Error(err)
 		}
 	})
-	setup, err := providers.NewSetupService(providers.SetupDefinitions())
+	authorizer := mocks.NewMockProviderAuthorizer(gomock.NewController(t))
+	authorizer.EXPECT().Authorize(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ alfred.ProviderAuthorizationRequest, publish func(string)) (alfred.ProviderAuthorization, error) {
+		publish("https://auth.example.test/authorize")
+		<-ctx.Done()
+		return alfred.ProviderAuthorization{State: alfred.ProviderAuthorizationCanceled}, nil
+	}).AnyTimes()
+	setup, err := providers.NewSetupService(providers.SetupDefinitions(), store, store, providers.WithAuthorizer("openai", authorizer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	submitter := providers.NewSubmitter(setup, store)
+	t.Cleanup(func() {
+		if err := setup.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
 	server := connect.NewServer()
-	alfredv1connect.RegisterProviderSetupServiceHandler(server, rpc.NewProviderSetupHandler(setup, submitter, store, &providerAuthorizerStub{}))
+	alfredv1connect.RegisterProviderSetupServiceHandler(server, rpc.NewProviderSetupHandler(setup))
 	model := readyModel(t)
 	model.clients = rpc.NewClients(connect.NewClient(connectinprocess.New(server)))
 	resized, _ := model.Update(tea.WindowSizeMsg{Width: 90, Height: 24})

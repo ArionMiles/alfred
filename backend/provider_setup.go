@@ -1,5 +1,7 @@
 package alfred
 
+import "context"
+
 // ProviderDefinition describes the setup methods offered by a model provider.
 // Configured accounts retain their own ProviderID separately.
 type ProviderDefinition struct {
@@ -78,4 +80,12 @@ type ProviderSetupSubmission struct {
 type ProviderSetupResult struct {
 	Instance    *ProviderInstance
 	FieldErrors []SetupFieldError
+}
+
+// ProviderAuthorizer runs one onboarding attempt. publish is called once when
+// its browser URL is ready. The caller assigns the polling identity.
+// Authorize returns only after callback handlers and persistence work have stopped.
+// The caller owns asynchronous execution and polling results.
+type ProviderAuthorizer interface {
+	Authorize(context.Context, ProviderAuthorizationRequest, func(string)) (ProviderAuthorization, error)
 }

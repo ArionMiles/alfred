@@ -122,7 +122,7 @@ func newSubmitter(t *testing.T) (*sqlite.Store, *providers.Submitter) {
 			t.Error(err)
 		}
 	})
-	setup, err := providers.NewSetupService(providers.SetupDefinitions())
+	setup, err := providers.NewSetupService(providers.SetupDefinitions(), store, store)
 	if err != nil {
 		t.Fatal(err)
 	}

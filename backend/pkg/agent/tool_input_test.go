@@ -40,7 +40,7 @@ func TestToolInputRequestWaitsAndResumesWithoutRepeatingTool(t *testing.T) {
 	if request.CallID != call.ID || len(request.Prompt) != 1 {
 		t.Fatalf("request=%v", request)
 	}
-	dispatcher := NewDispatcher(t.Context(), runner)
+	dispatcher := newTestDispatcher(t, runner)
 	if err := dispatcher.ProvideInput(t.Context(), run.ID, alfred.InputResponse{RequestID: request.ID, Content: []alfred.ContentPart{alfred.TextContent{Text: "main"}}}); err != nil {
 		t.Fatal(err)
 	}

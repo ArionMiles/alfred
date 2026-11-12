@@ -11,33 +11,12 @@ import (
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
-type providerSetupStore interface {
-	GetProviderInstance(context.Context, alfred.ProviderID) (alfred.ProviderInstance, error)
-	PutProviderInstance(context.Context, alfred.ProviderInstance) error
-}
+// ProviderSetupHandler translates the onboarding RPC contract to the setup service.
+type ProviderSetupHandler struct{ setup *providers.SetupService }
 
-type providerAuthorizer interface {
-	Start(context.Context, alfred.ProviderAuthorizationRequest) (alfred.ProviderAuthorization, error)
-	Get(context.Context, alfred.ProviderAuthorizationID) (alfred.ProviderAuthorization, error)
-	Cancel(context.Context, alfred.ProviderAuthorizationID) (alfred.ProviderAuthorization, error)
-}
-
-// ProviderSetupHandler exposes onboarding without exposing stored credentials.
-type ProviderSetupHandler struct {
-	setup      *providers.SetupService
-	submitter  *providers.Submitter
-	store      providerSetupStore
-	authorizer providerAuthorizer
-}
-
-// NewProviderSetupHandler composes provider forms and interactive authorization.
-func NewProviderSetupHandler(
-	setup *providers.SetupService,
-	submitter *providers.Submitter,
-	store providerSetupStore,
-	authorizer providerAuthorizer,
-) *ProviderSetupHandler {
-	return &ProviderSetupHandler{setup: setup, submitter: submitter, store: store, authorizer: authorizer}
+// NewProviderSetupHandler exposes provider setup without owning its workflows.
+func NewProviderSetupHandler(setup *providers.SetupService) *ProviderSetupHandler {
+	return &ProviderSetupHandler{setup: setup}
 }
 
 // StartProviderAuthorization begins an interactive provider setup method.
@@ -50,10 +29,7 @@ func (handler *ProviderSetupHandler) StartProviderAuthorization(
 	if request == nil {
 		return nil, connectError(errors.B.Op(op).KindInvalidArgument().Text("request is nil").Build())
 	}
-	if handler.authorizer == nil {
-		return nil, connectError(errors.B.Op(op).KindFailedPrecondition().Text("provider authorization is unavailable").Build())
-	}
-	authorization, err := handler.authorizer.Start(ctx, alfred.ProviderAuthorizationRequest{
+	authorization, err := handler.setup.Start(ctx, alfred.ProviderAuthorizationRequest{
 		Type: alfred.ProviderType(request.GetType()), MethodID: request.GetMethodId(),
 	})
 	if err != nil {
@@ -72,10 +48,7 @@ func (handler *ProviderSetupHandler) GetProviderAuthorization(
 	if request == nil {
 		return nil, connectError(errors.B.Op(op).KindInvalidArgument().Text("request is nil").Build())
 	}
-	if handler.authorizer == nil {
-		return nil, connectError(errors.B.Op(op).KindFailedPrecondition().Text("provider authorization is unavailable").Build())
-	}
-	authorization, err := handler.authorizer.Get(ctx, alfred.ProviderAuthorizationID(request.GetAuthorizationId()))
+	authorization, err := handler.setup.Get(ctx, alfred.ProviderAuthorizationID(request.GetAuthorizationId()))
 	if err != nil {
 		return nil, connectError(err)
 	}
@@ -92,10 +65,7 @@ func (handler *ProviderSetupHandler) CancelProviderAuthorization(
 	if request == nil {
 		return nil, connectError(errors.B.Op(op).KindInvalidArgument().Text("request is nil").Build())
 	}
-	if handler.authorizer == nil {
-		return nil, connectError(errors.B.Op(op).KindFailedPrecondition().Text("provider authorization is unavailable").Build())
-	}
-	authorization, err := handler.authorizer.Cancel(ctx, alfred.ProviderAuthorizationID(request.GetAuthorizationId()))
+	authorization, err := handler.setup.Cancel(ctx, alfred.ProviderAuthorizationID(request.GetAuthorizationId()))
 	if err != nil {
 		return nil, connectError(err)
 	}
@@ -133,14 +103,7 @@ func (handler *ProviderSetupHandler) PrepareProviderSetup(
 	if request == nil {
 		return nil, connectError(errors.B.Op(op).KindInvalidArgument().Text("request is nil").Build())
 	}
-	instance, err := handler.store.GetProviderInstance(ctx, alfred.ProviderID(request.GetType()))
-	var existing *alfred.ProviderInstance
-	if err == nil {
-		existing = &instance
-	} else if errors.WhatKind(err) != errors.NotFound {
-		return nil, connectError(err)
-	}
-	form, err := handler.setup.PrepareForm(alfred.ProviderType(request.GetType()), request.GetMethodId(), existing)
+	form, err := handler.setup.Prepare(ctx, alfred.ProviderType(request.GetType()), request.GetMethodId())
 	if err != nil {
 		return nil, connectError(err)
 	}
@@ -160,7 +123,7 @@ func (handler *ProviderSetupHandler) SubmitProviderSetup(
 	if request == nil {
 		return nil, connectError(errors.B.Op(op).KindInvalidArgument().Text("request is nil").Build())
 	}
-	result, err := handler.submitter.Submit(ctx, handler.store, alfred.ProviderSetupSubmission{
+	result, err := handler.setup.Submit(ctx, alfred.ProviderSetupSubmission{
 		Type: alfred.ProviderType(request.GetType()), MethodID: request.GetMethodId(), Values: request.GetValues(),
 	})
 	if err != nil {
