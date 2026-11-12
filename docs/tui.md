@@ -123,3 +123,25 @@ retry. Service startup does not automatically resume unfinished runs.
 The defaults are Enter to submit, Ctrl+C to interrupt, and Ctrl+P for the palette.
 See [Client settings](config.md#client-settings--clitoml) to change them in
 `cli.toml`. Theme selection and appearance settings are not available yet.
+
+## Stop or restart the local daemon
+
+```sh
+alfred stop
+alfred restart
+```
+
+These commands control the local daemon for the configured data directory.
+`stop` succeeds when it is already stopped. `restart` starts a stopped daemon,
+or gracefully stops the running daemon and starts the current Alfred executable.
+It returns only after the replacement is ready. Use the same `ALFRED_CONFIG_FILE`
+selection as the daemon when using a custom configuration.
+
+Stopping waits for active execution and provider setup to finish cleanup, then
+for storage to close and ownership to be released. A timeout returns an error
+without force-killing the process; restart does not launch a replacement when
+stopping fails. Active runs become interrupted and can be resumed explicitly.
+After a restart, quit and reopen a connected TUI to discover the new endpoint.
+
+For Docker-managed daemons, use `docker compose stop` or `docker compose restart`
+so the container supervisor owns the lifecycle.

@@ -151,31 +151,11 @@ tasks:
         binary="$(cd "$(dirname "$DEV_BINARY")" && pwd -P)/$(basename "$DEV_BINARY")"
         mkdir -p -m 700 "$DEV_DATA_DIR"
         printf 'data_dir = "."\n' > "$ALFRED_CONFIG_FILE"
-        discovery="$DEV_DATA_DIR/service.json"
-        if test "$DEV_ARGS" = "--force" && test -f "$discovery"; then
-          pid=$(sed -n 's/.*"pid":[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$discovery")
-          case "$pid" in
-            ""|*[!0-9]*|0|1) printf '%s\n' "Invalid server PID in $discovery" >&2; exit 1 ;;
-          esac
-          if /bin/kill -0 "$pid" 2>/dev/null; then
-            process=$(ps -p "$pid" -o args=)
-            if test "$process" != "$binary serve"; then
-              printf '%s\n' "PID $pid does not match $binary serve; refusing to stop it" >&2
-              exit 1
-            fi
-            /bin/kill -TERM "$pid"
-            attempts=0
-            while /bin/kill -0 "$pid" 2>/dev/null; do
-              if test "$attempts" -ge 150; then
-                printf '%s\n' "Server $pid did not stop within 15 seconds" >&2
-                exit 1
-              fi
-              sleep 0.1
-              attempts=$((attempts + 1))
-            done
-          fi
-        fi
+        restart_requested="$DEV_ARGS"
         unset DEV_ARGS DEV_BINARY DEV_DATA_DIR
+        if test "$restart_requested" = "--force"; then
+          "$binary" restart
+        fi
         exec "$binary" tui
   audit:
     desc: Check known vulnerabilities

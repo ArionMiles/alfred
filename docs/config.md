@@ -21,7 +21,7 @@ Linux and macOS use the same locations:
 When XDG_CONFIG_HOME is unset or empty, the base is `~/.config`. XDG paths must
 be absolute. Missing default files use defaults; existing invalid or unreadable
 files produce errors. Unknown TOML settings and incorrect value types are
-rejected. Both `alfred tui` and `alfred serve` load and validate both files.
+rejected. `alfred tui`, `serve`, `stop`, and `restart` load and validate both files.
 Bare `alfred`, help output, and `alfred --version` do not load configuration;
 they work even when a file is missing or invalid.
 

@@ -85,6 +85,14 @@ in-process terminal application could avoid. The shared HTTP contract accepts
 that cost to keep terminal presentation independent of execution and avoid a
 second transport model for other clients.
 
+Local stop and restart use OS signals after verifying discovery against the
+RPC instance identity. Completion is established by acquiring the existing
+ownership lock, rather than by endpoint disappearance: the endpoint can close
+while cleanup still writes storage. Restart starts the current executable only
+after that ownership has been released and waits for readiness. External
+supervisors, including Docker Compose, retain responsibility for deployments
+they manage.
+
 The deployment assumption is one service per data directory in a trusted
 environment. Daemon selection belongs to clients; the RPC boundary allows that
 workflow to evolve without changing agent execution. Local discovery and process

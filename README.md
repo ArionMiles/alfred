@@ -33,12 +33,21 @@ brew install --cask ArionMiles/tap/alfred
 Start Alfred from the project you want to work in:
 
 ```sh
+# Run the service in a separate terminal
+alfred serve
+
+# Open the TUI client in a local directory
 cd /path/to/your/project
 alfred tui
+
+# Restart the background service
+alfred restart
+
+# Stop the background service
+alfred stop
 ```
 
-Bare `alfred` shows usage. Use `alfred tui` to open the client or `alfred serve`
-to run the daemon in the foreground.
+Use Docker Compose to stop or restart container-managed deployments.
 
 Show command help or the installed build version without starting Alfred:
 

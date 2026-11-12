@@ -55,6 +55,16 @@ available.
 Containers on the same Compose network can connect to `http://alfred:8080`.
 A future web client can use that address without accessing Alfred's data volume.
 
+## Restart
+
+```sh
+docker compose restart
+```
+
+Use Compose to manage the container lifecycle. The `alfred stop` and
+`alfred restart` commands are for locally managed daemons; stopping the process
+inside a container can cause its restart policy to start it again.
+
 ## Update and stop
 
 ```sh

@@ -28,7 +28,7 @@ func TestBareCommandShowsUsageWithoutLoadingConfiguration(t *testing.T) {
 		t.Fatalf("unexpected stderr: %s", errorOutput.String())
 	}
 	for _, child := range command.Commands() {
-		if !child.Hidden && child.Name() != "tui" && child.Name() != "serve" {
+		if !child.Hidden && child.Name() != "tui" && child.Name() != "serve" && child.Name() != "stop" && child.Name() != "restart" {
 			t.Fatalf("unexpected command %q", child.Name())
 		}
 	}
@@ -37,7 +37,7 @@ func TestBareCommandShowsUsageWithoutLoadingConfiguration(t *testing.T) {
 func TestExecutableCommandsLoadConfiguration(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing.toml")
 	t.Setenv("ALFRED_CONFIG_FILE", path)
-	for _, name := range []string{"tui", "serve"} {
+	for _, name := range []string{"tui", "serve", "stop", "restart"} {
 		t.Run(name, func(t *testing.T) {
 			command := newRootCommand()
 			var output bytes.Buffer
@@ -60,13 +60,19 @@ func TestCommandsRejectArgumentsBeforeLoadingConfiguration(t *testing.T) {
 		{"unknown"},
 		{"ser"},
 		{"tu"},
+		{"st"},
+		{"res"},
 		{"help"},
 		{"completion"},
 		{"serve", "extra"},
 		{"tui", "extra"},
+		{"stop", "extra"},
+		{"restart", "extra"},
 		{"--unknown"},
 		{"serve", "--unknown"},
 		{"tui", "--unknown"},
+		{"stop", "--unknown"},
+		{"restart", "--unknown"},
 	} {
 		t.Run(strings.Join(arguments, " "), func(t *testing.T) {
 			command := newRootCommand()
@@ -106,6 +112,8 @@ func TestHelpAndVersionDoNotLoadConfiguration(t *testing.T) {
 				{arguments: []string{"--help"}, contains: "Alfred personal agent"},
 				{arguments: []string{"tui", "--help"}, contains: "Open the terminal client"},
 				{arguments: []string{"serve", "--help"}, contains: "Run the background service in the foreground"},
+				{arguments: []string{"stop", "--help"}, contains: "Stop the local background service"},
+				{arguments: []string{"restart", "--help"}, contains: "Restart or start the local background service"},
 				{arguments: []string{"--version"}, contains: "alfred version " + buildinfo.Version + "\n"},
 			} {
 				t.Run(strings.Join(test.arguments, " "), func(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/ArionMiles/alfred/internal/buildinfo"
 	"github.com/ArionMiles/alfred/internal/config"
+	"github.com/ArionMiles/alfred/pkg/daemon"
 )
 
 func newRootCommand() *cobra.Command {
@@ -22,7 +23,7 @@ func newRootCommand() *cobra.Command {
 	}
 	// Suppress Cobra's standalone help command; bare Alfred already shows usage.
 	command.SetHelpCommand(&cobra.Command{Hidden: true})
-	command.AddCommand(newTUICommand(), newServeCommand())
+	command.AddCommand(newTUICommand(), newServeCommand(), newStopCommand(), newRestartCommand())
 	return command
 }
 
@@ -52,6 +53,40 @@ func newServeCommand() *cobra.Command {
 				return err
 			}
 			return serve(command.Context(), settings)
+		},
+	}
+}
+
+func newStopCommand() *cobra.Command {
+	return &cobra.Command{
+		Use: "stop", Short: "Stop the local background service", Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			settings, err := config.Load()
+			if err != nil {
+				return err
+			}
+			daemonConfig := settings.Daemon
+			daemonConfig.DataDir = settings.DataDir
+			return daemon.Stop(command.Context(), daemonConfig)
+		},
+	}
+}
+
+func newRestartCommand() *cobra.Command {
+	return &cobra.Command{
+		Use: "restart", Short: "Restart or start the local background service", Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			settings, err := config.Load()
+			if err != nil {
+				return err
+			}
+			daemonConfig := settings.Daemon
+			daemonConfig.DataDir = settings.DataDir
+			if err := daemon.Stop(command.Context(), daemonConfig); err != nil {
+				return err
+			}
+			_, err = daemon.Ensure(command.Context(), daemonConfig, startServiceProcess)
+			return err
 		},
 	}
 }
