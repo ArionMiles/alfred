@@ -41,8 +41,9 @@ func TestRunnerDiscoversSkillsOnceWhenPreparingRun(t *testing.T) {
 	if len(request.SkillCatalog.Skills) != 1 || request.SkillCatalog.Skills[0].Name != "code-review" {
 		t.Fatalf("Build() skill catalog = %#v", request.SkillCatalog)
 	}
-	if fixture.modelCallIDs.calls != 1 {
-		t.Fatalf("model-call ID calls = %d, want 1", fixture.modelCallIDs.calls)
+	requests := fixture.provider.snapshotRequests()
+	if len(requests) != 1 || requests[0].ID == "" {
+		t.Fatalf("model requests = %#v, want one identified call", requests)
 	}
 }
 
@@ -99,7 +100,8 @@ func TestRunnerStreamsAndRecordsModelResponse(t *testing.T) {
 		case alfred.MessageAdded:
 			message = payload.Message
 		case alfred.ModelCallCompleted:
-			completed = payload.CallID == "model-call-1"
+			requests := fixture.provider.snapshotRequests()
+			completed = len(requests) == 1 && requests[0].ID != "" && payload.CallID == requests[0].ID
 		}
 	}
 	if len(message.Content) != 1 || message.Content[0].(alfred.TextContent).Text != "Hello there" {
@@ -314,7 +316,7 @@ func TestRunnerContinuesAfterAllowedToolCall(t *testing.T) {
 			Role: alfred.MessageRoleAssistant, Content: []alfred.ContentPart{alfred.TextContent{Text: "Done"}},
 		}}}, {Payload: alfred.ModelCompleted{Reason: alfred.ModelFinishReasonStop}}},
 	}
-	fixture.modelCallIDs.ids = []alfred.ModelCallID{"model-call-1", "model-call-2"}
+
 	executor := mocks.NewMockExecutor(fixture.controller)
 	executor.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(func(
 		_ context.Context,
@@ -336,6 +338,9 @@ func TestRunnerContinuesAfterAllowedToolCall(t *testing.T) {
 	requests := fixture.provider.snapshotRequests()
 	if fixture.runs.status() != alfred.RunStatusCompleted || len(requests) != 2 {
 		t.Fatalf("status = %q, requests = %d", fixture.runs.status(), len(requests))
+	}
+	if requests[0].ID == "" || requests[1].ID == "" || requests[0].ID == requests[1].ID {
+		t.Fatalf("model calls must have distinct nonempty IDs: %q, %q", requests[0].ID, requests[1].ID)
 	}
 	secondInput := requests[1].Input
 	if len(secondInput) != 2 || secondInput[0].Payload.(alfred.ToolCall).RunID != run.ID ||
@@ -367,7 +372,7 @@ func TestRunnerWaitsWhenToolCallRequiresApproval(t *testing.T) {
 		{Payload: alfred.ModelToolCall{Call: call}},
 		{Payload: alfred.ModelCompleted{Reason: alfred.ModelFinishReasonToolCall}},
 	}
-	fixture.approvalIDs.id = "approval-1"
+
 	executor := mocks.NewMockExecutor(fixture.controller)
 	executor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(alfred.ExecutionOutcome{
 		Decision:     alfred.PolicyDecision{Outcome: alfred.PolicyOutcomeAsk, Reason: "shell requires approval"},
@@ -387,7 +392,7 @@ func TestRunnerWaitsWhenToolCallRequiresApproval(t *testing.T) {
 			request = payload.Request
 		}
 	}
-	if request.ID != "approval-1" || request.CallID != call.ID || request.ActionDigest != "action-digest" {
+	if request.ID == "" || request.CallID != call.ID || request.ActionDigest != "action-digest" {
 		t.Fatalf("approval request = %#v", request)
 	}
 }
@@ -564,14 +569,13 @@ func TestRunnerReturnsPolicyDenialAsToolError(t *testing.T) {
 }
 
 type runnerFixture struct {
-	controller      *gomock.Controller
-	dependencies    Dependencies
-	runs            *runState
-	provider        *providerState
-	events          *eventState
-	updates         *updateState
-	modelCallIDs    *idGenerator[alfred.ModelCallID]
-	approvalIDs     *idGenerator[alfred.ApprovalID]
+	controller   *gomock.Controller
+	dependencies Dependencies
+	runs         *runState
+	provider     *providerState
+	events       *eventState
+	updates      *updateState
+
 	modelContext    alfred.ModelContext
 	skillCatalog    alfred.SkillCatalog
 	contextRequests []alfred.ContextRequest
@@ -582,13 +586,11 @@ func newRunnerFixture(t *testing.T, run alfred.Run, model alfred.ModelInfo) *run
 	t.Helper()
 	controller := gomock.NewController(t)
 	fixture := &runnerFixture{
-		controller:   controller,
-		runs:         &runState{run: run},
-		provider:     &providerState{providerID: run.DefaultModel.ProviderID, model: model},
-		events:       &eventState{},
-		updates:      &updateState{},
-		modelCallIDs: &idGenerator[alfred.ModelCallID]{id: "model-call-1"},
-		approvalIDs:  &idGenerator[alfred.ApprovalID]{id: "approval-1"},
+		controller: controller,
+		runs:       &runState{run: run},
+		provider:   &providerState{providerID: run.DefaultModel.ProviderID, model: model},
+		events:     &eventState{},
+		updates:    &updateState{},
 	}
 	runs := newRunStoreMock(controller, fixture.runs)
 	sessions := mocks.NewMockSessionStore(controller)
@@ -632,24 +634,21 @@ func newRunnerFixture(t *testing.T, run alfred.Run, model alfred.ModelInfo) *run
 		fixture.updates.add(update)
 	}).AnyTimes()
 	fixture.dependencies = Dependencies{
-		Runs:                 runs,
-		Sessions:             sessions,
-		Invocations:          invocations,
-		Providers:            providers,
-		Skills:               skills,
-		Contexts:             contexts,
-		ModelCallIDGenerator: fixture.modelCallIDs,
-		ApprovalIDGenerator:  fixture.approvalIDs,
-		Events:               eventSink,
-		EventReader:          eventReader,
-		Broadcaster:          broadcaster,
+		Runs:        runs,
+		Sessions:    sessions,
+		Invocations: invocations,
+		Providers:   providers,
+		Skills:      skills,
+		Contexts:    contexts,
+
+		Events:      eventSink,
+		EventReader: eventReader,
+		Broadcaster: broadcaster,
 	}
 	return fixture
 }
 
 func (fixture *runnerFixture) runner() *Runner {
-	fixture.dependencies.ModelCallIDGenerator = fixture.modelCallIDs
-	fixture.dependencies.ApprovalIDGenerator = fixture.approvalIDs
 	return NewRunner(fixture.dependencies)
 }
 
@@ -834,22 +833,6 @@ func (state *updateState) snapshot() []alfred.RunUpdate {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	return append([]alfred.RunUpdate(nil), state.updates...)
-}
-
-// mockgen cannot generate the generic IDGenerator interface.
-type idGenerator[T ~string] struct {
-	id    T
-	ids   []T
-	err   error
-	calls int
-}
-
-func (generator *idGenerator[T]) New() (T, error) {
-	generator.calls++
-	if generator.calls <= len(generator.ids) {
-		return generator.ids[generator.calls-1], generator.err
-	}
-	return generator.id, generator.err
 }
 
 func pendingApprovalEvents(

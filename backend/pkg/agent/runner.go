@@ -6,39 +6,46 @@ import (
 
 	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/internal/history"
+	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
 // Runner starts or resumes agent runs from durable state.
 type Runner struct {
-	runs                 alfred.RunStore
-	sessions             alfred.SessionStore
-	invocations          alfred.InvocationStore
-	providers            alfred.ProviderResolver
-	skills               alfred.SkillResolver
-	contexts             alfred.ContextBuilder
-	modelCallIDGenerator alfred.IDGenerator[alfred.ModelCallID]
-	approvalIDGenerator  alfred.IDGenerator[alfred.ApprovalID]
-	executor             alfred.Executor
-	events               alfred.RunEventSink
-	eventReader          alfred.RunEventReader
-	broadcaster          alfred.RunUpdateBroadcaster
+	runs        alfred.RunStore
+	sessions    alfred.SessionStore
+	invocations alfred.InvocationStore
+	providers   alfred.ProviderResolver
+	skills      alfred.SkillResolver
+	contexts    alfred.ContextBuilder
+	executor    alfred.Executor
+	events      alfred.RunEventSink
+	eventReader alfred.RunEventReader
+	broadcaster alfred.RunUpdateBroadcaster
 }
 
 // Dependencies contains the harness-owned components used by a Runner.
 type Dependencies struct {
-	Runs                 alfred.RunStore
-	Sessions             alfred.SessionStore
-	Invocations          alfred.InvocationStore
-	Providers            alfred.ProviderResolver
-	Skills               alfred.SkillResolver
-	Contexts             alfred.ContextBuilder
-	ModelCallIDGenerator alfred.IDGenerator[alfred.ModelCallID]
-	ApprovalIDGenerator  alfred.IDGenerator[alfred.ApprovalID]
-	Executor             alfred.Executor
-	Events               alfred.RunEventSink
-	EventReader          alfred.RunEventReader
-	Broadcaster          alfred.RunUpdateBroadcaster
+	// Loads durable run state and persists lifecycle transitions.
+	Runs alfred.RunStore
+	// Locates the session and project that own the run.
+	Sessions alfred.SessionStore
+	// Loads the request that initiated the run.
+	Invocations alfred.InvocationStore
+	// Resolves the configured model provider for the run.
+	Providers alfred.ProviderResolver
+	// Discovers skills available to the run's project.
+	Skills alfred.SkillResolver
+	// Builds model instructions, conversation input, and tool definitions.
+	Contexts alfred.ContextBuilder
+	// Applies execution policy and invokes requested tools.
+	Executor alfred.Executor
+	// Persists ordered run events.
+	Events alfred.RunEventSink
+	// Replays durable events to restore execution state.
+	EventReader alfred.RunEventReader
+	// Publishes live output and reasoning deltas.
+	Broadcaster alfred.RunUpdateBroadcaster
 }
 
 type runScope struct {
@@ -53,18 +60,16 @@ type runScope struct {
 // NewRunner creates an agent runner from its harness dependencies.
 func NewRunner(dependencies Dependencies) *Runner {
 	return &Runner{
-		runs:                 dependencies.Runs,
-		sessions:             dependencies.Sessions,
-		invocations:          dependencies.Invocations,
-		providers:            dependencies.Providers,
-		skills:               dependencies.Skills,
-		contexts:             dependencies.Contexts,
-		modelCallIDGenerator: dependencies.ModelCallIDGenerator,
-		approvalIDGenerator:  dependencies.ApprovalIDGenerator,
-		executor:             dependencies.Executor,
-		events:               dependencies.Events,
-		eventReader:          dependencies.EventReader,
-		broadcaster:          dependencies.Broadcaster,
+		runs:        dependencies.Runs,
+		sessions:    dependencies.Sessions,
+		invocations: dependencies.Invocations,
+		providers:   dependencies.Providers,
+		skills:      dependencies.Skills,
+		contexts:    dependencies.Contexts,
+		executor:    dependencies.Executor,
+		events:      dependencies.Events,
+		eventReader: dependencies.EventReader,
+		broadcaster: dependencies.Broadcaster,
 	}
 }
 
@@ -161,14 +166,7 @@ func (runner *Runner) Execute(ctx context.Context, runID alfred.RunID) (executeE
 			continuation.pendingToolCalls = nil
 		}
 
-		modelCallID, err := runner.modelCallIDGenerator.New()
-		if err != nil {
-			return runner.failRun(ctx, runID, errors.B.
-				Op(op).
-				Textf("create model call ID for run %q", runID).
-				Err(err).
-				Build())
-		}
+		modelCallID := identity.New[alfred.ModelCallID]()
 		modelRequest := alfred.ModelRequest{
 			ID:           modelCallID,
 			RunID:        scope.run.ID,
@@ -522,14 +520,7 @@ func (runner *Runner) executeToolCalls(
 			}
 			results = append(results, result)
 		case alfred.PolicyOutcomeAsk:
-			approvalID, err := runner.approvalIDGenerator.New()
-			if err != nil {
-				return nil, false, errors.B.
-					Op(op).
-					Textf("create approval ID for tool call %q", call.ID).
-					Err(err).
-					Build()
-			}
+			approvalID := identity.New[alfred.ApprovalID]()
 			if _, err := runner.events.Append(ctx, alfred.NewRunEvent{
 				RunID:      scope.run.ID,
 				Visibility: alfred.RunEventVisibilityUser,

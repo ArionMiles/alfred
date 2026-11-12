@@ -22,6 +22,10 @@ private, narrow interface can be satisfied by an SDK user's implementation.
 Shared contracts are useful when they establish common semantics, rather than
 merely collecting methods that happen to be used together.
 
+Components generate opaque identities internally using cryptographic randomness.
+Identity generation is an implementation detail rather than an SDK setup option;
+tests verify persisted identity relationships instead of requiring fixed values.
+
 Core operations receive creation timestamps from their callers rather than
 depending on a shared clock abstraction. Time-dependent decisions accept an
 explicit instant so their boundary behavior can be tested directly. Infrastructure

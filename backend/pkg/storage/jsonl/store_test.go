@@ -6,7 +6,6 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -18,7 +17,7 @@ import (
 func TestNewUsesConfig(t *testing.T) {
 	t.Parallel()
 
-	store := New(Config{DataDir: "events", LockShardCount: 3}, nil, nil, nil)
+	store := New(Config{DataDir: "events", LockShardCount: 3}, nil, nil)
 	if store.dataDir != "events" {
 		t.Fatalf("data directory = %q, want events", store.dataDir)
 	}
@@ -37,7 +36,7 @@ func TestStoreAppendsSessionSequenceAndReadsViews(t *testing.T) {
 		"run-2": {ID: "run-2", SessionID: session.ID},
 	}}
 	sessions := sessionReaderStub{sessions: map[alfred.SessionID]alfred.Session{session.ID: session}}
-	store := newTestStore(dataDir, runs, sessions, "event-")
+	store := newTestStore(dataDir, runs, sessions)
 
 	before := time.Now()
 	first, err := store.Append(t.Context(), alfred.NewRunEvent{
@@ -57,8 +56,8 @@ func TestStoreAppendsSessionSequenceAndReadsViews(t *testing.T) {
 	if first.Sequence != 1 || second.Sequence != 2 {
 		t.Fatalf("sequences = %d, %d, want 1, 2", first.Sequence, second.Sequence)
 	}
-	if first.ID != "event-1" || second.ID != "event-2" {
-		t.Fatalf("event IDs = %q, %q, want event-1, event-2", first.ID, second.ID)
+	if first.ID == "" || second.ID == "" || first.ID == second.ID {
+		t.Fatalf("event IDs = %q, %q, want distinct nonempty IDs", first.ID, second.ID)
 	}
 	if first.SessionID != session.ID || second.SessionID != session.ID {
 		t.Fatalf("event session IDs = %q, %q, want %q", first.SessionID, second.SessionID, session.ID)
@@ -99,12 +98,12 @@ func TestStoreContinuesSequenceAfterRestart(t *testing.T) {
 		"run-1": {ID: "run-1", SessionID: session.ID},
 	}}
 	sessions := sessionReaderStub{sessions: map[alfred.SessionID]alfred.Session{session.ID: session}}
-	firstStore := newTestStore(dataDir, runs, sessions, "first-")
+	firstStore := newTestStore(dataDir, runs, sessions)
 	if _, err := firstStore.Append(t.Context(), stateEvent("run-1")); err != nil {
 		t.Fatalf("Append() before restart error = %v", err)
 	}
 
-	restarted := newTestStore(dataDir, runs, sessions, "second-")
+	restarted := newTestStore(dataDir, runs, sessions)
 	event, err := restarted.Append(t.Context(), stateEvent("run-1"))
 	if err != nil {
 		t.Fatalf("Append() after restart error = %v", err)
@@ -123,7 +122,7 @@ func TestStoreSerializesConcurrentSessionAppends(t *testing.T) {
 		"run-1": {ID: "run-1", SessionID: session.ID},
 	}}
 	sessions := sessionReaderStub{sessions: map[alfred.SessionID]alfred.Session{session.ID: session}}
-	store := newTestStore(dataDir, runs, sessions, "event-")
+	store := newTestStore(dataDir, runs, sessions)
 
 	const appendCount = 12
 	errs := make(chan error, appendCount)
@@ -148,7 +147,12 @@ func TestStoreSerializesConcurrentSessionAppends(t *testing.T) {
 	if len(events) != appendCount {
 		t.Fatalf("event count = %d, want %d", len(events), appendCount)
 	}
+	ids := make(map[alfred.RunEventID]bool, len(events))
 	for index, event := range events {
+		if event.ID == "" || ids[event.ID] {
+			t.Fatalf("event %d has an empty or duplicate ID %q", index, event.ID)
+		}
+		ids[event.ID] = true
 		if event.Sequence != uint64(index+1) {
 			t.Fatalf("event %d sequence = %d, want %d", index, event.Sequence, index+1)
 		}
@@ -171,7 +175,7 @@ func TestStoreReportsIncompleteFinalRecord(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"version":1}`), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
-	store := newTestStore(dataDir, runs, sessions, "event-")
+	store := newTestStore(dataDir, runs, sessions)
 
 	_, err := store.Append(t.Context(), stateEvent("run-1"))
 	if got := errors.WhatKind(err); got != errors.InvalidInput {
@@ -186,7 +190,7 @@ func BenchmarkStoreAppend(b *testing.B) {
 		"run-1": {ID: "run-1", SessionID: session.ID},
 	}}
 	sessions := sessionReaderStub{sessions: map[alfred.SessionID]alfred.Session{session.ID: session}}
-	store := newTestStore(dataDir, runs, sessions, "event-")
+	store := newTestStore(dataDir, runs, sessions)
 	event := stateEvent("run-1")
 
 	b.ReportAllocs()
@@ -202,13 +206,11 @@ func newTestStore(
 	dataDir string,
 	runs runReader,
 	sessions sessionReader,
-	prefix string,
 ) *Store {
 	return New(
 		Config{DataDir: dataDir, LockShardCount: 64},
 		runs,
 		sessions,
-		&eventIDGeneratorStub{prefix: prefix},
 	)
 }
 
@@ -245,17 +247,4 @@ type sessionReaderStub struct {
 
 func (reader sessionReaderStub) GetSession(_ context.Context, id alfred.SessionID) (alfred.Session, error) {
 	return reader.sessions[id], nil
-}
-
-type eventIDGeneratorStub struct {
-	mu     sync.Mutex
-	prefix string
-	next   int
-}
-
-func (generator *eventIDGeneratorStub) New() (alfred.RunEventID, error) {
-	generator.mu.Lock()
-	defer generator.mu.Unlock()
-	generator.next++
-	return alfred.RunEventID(generator.prefix + strconv.Itoa(generator.next)), nil
 }

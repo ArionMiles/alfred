@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/ArionMiles/alfred"
+	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
@@ -16,7 +17,6 @@ type SearchSetup struct {
 	definitions map[string]alfred.SearchBackendDefinition
 	store       alfred.SearchSettingsStore
 	credentials alfred.CredentialWriter
-	references  alfred.IDGenerator[alfred.CredentialRef]
 }
 
 // SearchSetupDefinitions returns the setup fields for installed search adapters.
@@ -27,15 +27,17 @@ func SearchSetupDefinitions() []alfred.SearchBackendDefinition {
 }
 
 // NewSearchSetup composes independent search metadata and credential storage.
-func NewSearchSetup(definitions []alfred.SearchBackendDefinition, store alfred.SearchSettingsStore, credentials alfred.CredentialWriter,
-	references alfred.IDGenerator[alfred.CredentialRef],
+func NewSearchSetup(
+	definitions []alfred.SearchBackendDefinition,
+	store alfred.SearchSettingsStore,
+	credentials alfred.CredentialWriter,
 ) *SearchSetup {
 	registered := make(map[string]alfred.SearchBackendDefinition, len(definitions))
 	for _, definition := range definitions {
 		definition.Fields = slices.Clone(definition.Fields)
 		registered[definition.ID] = definition
 	}
-	return &SearchSetup{definitions: registered, store: store, credentials: credentials, references: references}
+	return &SearchSetup{definitions: registered, store: store, credentials: credentials}
 }
 
 // List returns independent search backend definitions in canonical-name order.
@@ -109,13 +111,7 @@ func (setup *SearchSetup) Save(ctx context.Context, backend string, values map[s
 			settings.Settings[field.ID] = values[field.ID]
 		}
 	}
-	ref, err := setup.references.New()
-	if err != nil {
-		return nil, errors.B.Op(op).Err(err).Build()
-	}
-	if ref == "" || ref == settings.CredentialRef {
-		return nil, errors.B.Op(op).KindConflict().Text("credential reference must be fresh").Build()
-	}
+	ref := identity.New[alfred.CredentialRef]()
 	data, err := json.Marshal(searchCredentialRecord{Version: 1, Backend: backend, Method: "api-key", Fields: secrets})
 	if err != nil {
 		return nil, errors.B.Op(op).Text("encode search credentials").Build()

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ArionMiles/alfred"
+	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
@@ -32,45 +33,36 @@ type modelSelectionReader interface {
 
 // Dependencies contains the harness-owned components used by a Service.
 type Dependencies struct {
-	ModelSelection        modelSelectionReader
-	Projects              projectReader
-	Sessions              sessionStore
-	Invocations           invocationWriter
-	Runs                  runWriter
-	InvocationIDGenerator alfred.IDGenerator[alfred.InvocationID]
-	SessionIDGenerator    alfred.IDGenerator[alfred.SessionID]
-	RunIDGenerator        alfred.IDGenerator[alfred.RunID]
-	Dispatcher            alfred.RunDispatcher
-	Events                alfred.RunEventSink
+	ModelSelection modelSelectionReader
+	Projects       projectReader
+	Sessions       sessionStore
+	Invocations    invocationWriter
+	Runs           runWriter
+	Dispatcher     alfred.RunDispatcher
+	Events         alfred.RunEventSink
 }
 
 // Service creates durable invocation records before dispatching their runs.
 type Service struct {
-	projects              projectReader
-	sessions              sessionStore
-	invocations           invocationWriter
-	runs                  runWriter
-	modelSelection        modelSelectionReader
-	invocationIDGenerator alfred.IDGenerator[alfred.InvocationID]
-	sessionIDGenerator    alfred.IDGenerator[alfred.SessionID]
-	runIDGenerator        alfred.IDGenerator[alfred.RunID]
-	dispatcher            alfred.RunDispatcher
-	events                alfred.RunEventSink
+	projects       projectReader
+	sessions       sessionStore
+	invocations    invocationWriter
+	runs           runWriter
+	modelSelection modelSelectionReader
+	dispatcher     alfred.RunDispatcher
+	events         alfred.RunEventSink
 }
 
 // NewService creates an invocation service with a persisted model selection reader.
 func NewService(dependencies Dependencies) *Service {
 	return &Service{
-		projects:              dependencies.Projects,
-		sessions:              dependencies.Sessions,
-		invocations:           dependencies.Invocations,
-		runs:                  dependencies.Runs,
-		modelSelection:        dependencies.ModelSelection,
-		invocationIDGenerator: dependencies.InvocationIDGenerator,
-		sessionIDGenerator:    dependencies.SessionIDGenerator,
-		runIDGenerator:        dependencies.RunIDGenerator,
-		dispatcher:            dependencies.Dispatcher,
-		events:                dependencies.Events,
+		projects:       dependencies.Projects,
+		sessions:       dependencies.Sessions,
+		invocations:    dependencies.Invocations,
+		runs:           dependencies.Runs,
+		modelSelection: dependencies.ModelSelection,
+		dispatcher:     dependencies.Dispatcher,
+		events:         dependencies.Events,
 	}
 }
 
@@ -113,14 +105,8 @@ func (service *Service) Invoke(
 			Build()
 	}
 
-	invocationID, err := service.invocationIDGenerator.New()
-	if err != nil {
-		return alfred.Run{}, errors.B.Op(op).Text("generate invocation ID").Err(err).Build()
-	}
-	runID, err := service.runIDGenerator.New()
-	if err != nil {
-		return alfred.Run{}, errors.B.Op(op).Text("generate run ID").Err(err).Build()
-	}
+	invocationID := identity.New[alfred.InvocationID]()
+	runID := identity.New[alfred.RunID]()
 
 	invocation := alfred.Invocation{
 		ID:        invocationID,
@@ -178,10 +164,7 @@ func (service *Service) getOrCreateSession(
 	const op = "getOrCreateSession"
 
 	if sessionID == "" {
-		id, err := service.sessionIDGenerator.New()
-		if err != nil {
-			return alfred.Session{}, errors.B.Op(op).Text("generate session ID").Err(err).Build()
-		}
+		id := identity.New[alfred.SessionID]()
 		session := alfred.Session{
 			ID:        id,
 			ProjectID: projectID,

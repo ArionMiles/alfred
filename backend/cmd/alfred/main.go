@@ -14,14 +14,12 @@ import (
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
 
-	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/internal/config"
 	"github.com/ArionMiles/alfred/pkg/agent"
 	contextbuilder "github.com/ArionMiles/alfred/pkg/context"
 	"github.com/ArionMiles/alfred/pkg/daemon"
 	"github.com/ArionMiles/alfred/pkg/events"
 	"github.com/ArionMiles/alfred/pkg/executor"
-	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/invocation"
 	"github.com/ArionMiles/alfred/pkg/project"
 	"github.com/ArionMiles/alfred/pkg/providers"
@@ -150,7 +148,6 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 		jsonl.Config{DataDir: settings.DataDir, LockShardCount: settings.History.LockShardCount},
 		store,
 		store,
-		identity.Generator[alfred.RunEventID]{},
 	)
 	eventSink := events.NewNotifyingEventSink(eventStore, broker)
 	userHome, err := os.UserHomeDir()
@@ -190,46 +187,41 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 		SystemRoot: settings.Skills.SystemRoot,
 	}, store)
 	runner := agent.NewRunner(agent.Dependencies{
-		Runs:                 store,
-		Sessions:             store,
-		Invocations:          store,
-		Providers:            providerRegistry,
-		Skills:               skillResolver,
-		Contexts:             contextbuilder.New(contextbuilder.Config{ConfigDir: settings.ConfigDir}, toolRegistry, eventStore, store),
-		ModelCallIDGenerator: identity.Generator[alfred.ModelCallID]{},
-		ApprovalIDGenerator:  identity.Generator[alfred.ApprovalID]{},
-		Executor:             executor.New(toolRegistry, store),
-		Events:               eventSink,
-		EventReader:          eventStore,
-		Broadcaster:          broker,
+		Runs:        store,
+		Sessions:    store,
+		Invocations: store,
+		Providers:   providerRegistry,
+		Skills:      skillResolver,
+		Contexts:    contextbuilder.New(contextbuilder.Config{ConfigDir: settings.ConfigDir}, toolRegistry, eventStore, store),
+		Executor:    executor.New(toolRegistry, store),
+		Events:      eventSink,
+		EventReader: eventStore,
+		Broadcaster: broker,
 	})
 	dispatcher := agent.NewDispatcher(ctx, runner)
 	invocationService := invocation.NewService(
 		invocation.Dependencies{
-			ModelSelection:        store,
-			Projects:              store,
-			Sessions:              store,
-			Invocations:           store,
-			Runs:                  store,
-			InvocationIDGenerator: identity.Generator[alfred.InvocationID]{},
-			SessionIDGenerator:    identity.Generator[alfred.SessionID]{},
-			RunIDGenerator:        identity.Generator[alfred.RunID]{},
-			Dispatcher:            dispatcher,
-			Events:                eventSink,
+			ModelSelection: store,
+			Projects:       store,
+			Sessions:       store,
+			Invocations:    store,
+			Runs:           store,
+			Dispatcher:     dispatcher,
+			Events:         eventSink,
 		},
 	)
-	projectService := project.NewService(store, identity.Generator[alfred.ProjectID]{})
+	projectService := project.NewService(store)
 	providerSetup, err := providers.NewSetupService(providers.SetupDefinitions())
 	if err != nil {
 		return nil, errors.B.Op(op).Text("create provider setup service").Err(err).Build()
 	}
-	providerSubmitter := providers.NewSubmitter(providerSetup, store, identity.Generator[alfred.CredentialRef]{})
+	providerSubmitter := providers.NewSubmitter(providerSetup, store)
 	providerAuthorization := openaiAuthorization.NewAuthorizationService(
 		ctx,
 		settings.OpenAIAuthorization,
 		openaiAuthorization.AuthorizationDependencies{
-			Store: store, Credentials: store, IDs: identity.Generator[alfred.ProviderAuthorizationID]{},
-			References: identity.Generator[alfred.CredentialRef]{}, HTTPClient: webClient,
+			Store: store, Credentials: store,
+			HTTPClient: webClient,
 		},
 	)
 	defer func() {
@@ -240,7 +232,7 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 	modelService := providers.NewModelService(store, providerRegistry, store)
 	status := rpc.NewDaemonHandler(owner.InstanceID(), owner.StartedAt())
 	handler := rpc.NewServer(rpc.Handlers{
-		SearchSetup:   rpc.NewSearchSetupHandler(tools.NewSearchSetup(tools.SearchSetupDefinitions(), store, store, identity.Generator[alfred.CredentialRef]{})),
+		SearchSetup:   rpc.NewSearchSetupHandler(tools.NewSearchSetup(tools.SearchSetupDefinitions(), store, store)),
 		Daemon:        status,
 		Project:       rpc.NewProjectHandler(projectService, skills.NewInspector(store), store),
 		Invocation:    rpc.NewInvocationHandler(invocationService),

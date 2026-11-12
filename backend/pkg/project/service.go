@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ArionMiles/alfred"
+	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
@@ -17,19 +18,12 @@ type projectStore interface {
 
 // Service resolves local directories to durable projects.
 type Service struct {
-	projects  projectStore
-	projectID alfred.IDGenerator[alfred.ProjectID]
+	projects projectStore
 }
 
 // NewService creates a project resolver from its runtime dependencies.
-func NewService(
-	projects projectStore,
-	projectID alfred.IDGenerator[alfred.ProjectID],
-) *Service {
-	return &Service{
-		projects:  projects,
-		projectID: projectID,
-	}
+func NewService(projects projectStore) *Service {
+	return &Service{projects: projects}
 }
 
 // ResolveProject returns the project for root, creating it when necessary.
@@ -69,10 +63,7 @@ func (service *Service) ResolveProject(ctx context.Context, root string, created
 			Build()
 	}
 
-	id, err := service.projectID.New()
-	if err != nil {
-		return alfred.Project{}, errors.B.Op(op).Text("generate project ID").Err(err).Build()
-	}
+	id := identity.New[alfred.ProjectID]()
 	project = alfred.Project{
 		ID:         id,
 		Name:       filepath.Base(canonicalRoot),

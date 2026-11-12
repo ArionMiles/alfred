@@ -52,7 +52,12 @@ func TestInvokeCreatesSessionAndDispatchesQueuedRun(t *testing.T) {
 		createdEvent = event
 		return alfred.RunEvent{}, nil
 	})
-	dispatcher.EXPECT().Dispatch(gomock.Any(), alfred.RunID("run-1")).Return(nil)
+	dispatcher.EXPECT().Dispatch(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, id alfred.RunID) error {
+		if id == "" || id != createdRun.ID {
+			t.Fatalf("dispatched run %q, persisted %q", id, createdRun.ID)
+		}
+		return nil
+	})
 	input := []alfred.ContentPart{alfred.TextContent{Text: "hello"}}
 
 	run, err := service.Invoke(t.Context(), alfred.InvocationRequest{
@@ -63,23 +68,23 @@ func TestInvokeCreatesSessionAndDispatchesQueuedRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
-	if createdSession.ID != "session-1" || createdSession.ProjectID != "project-1" || createdSession.CreatedAt != createdAt {
+	if createdSession.ID == "" || createdSession.ProjectID != "project-1" || createdSession.CreatedAt != createdAt {
 		t.Fatalf("CreateSession() session = %#v", createdSession)
 	}
-	if createdInvocation.ID != "invocation-1" ||
-		createdInvocation.SessionID != "session-1" ||
+	if createdInvocation.ID == "" ||
+		createdInvocation.SessionID != createdSession.ID ||
 		createdInvocation.CreatedAt != createdAt {
 		t.Fatalf("CreateInvocation() invocation = %#v", createdInvocation)
 	}
 	wantRun := alfred.Run{
-		ID:           "run-1",
-		InvocationID: "invocation-1",
-		SessionID:    "session-1",
+		ID:           createdRun.ID,
+		InvocationID: createdInvocation.ID,
+		SessionID:    createdSession.ID,
 		DefaultModel: alfred.ModelRef{ProviderID: "provider-1", ModelID: "model-1"},
 		Status:       alfred.RunStatusQueued,
 		CreatedAt:    createdAt,
 	}
-	if run != wantRun || createdRun != wantRun {
+	if run.ID == "" || run != wantRun || createdRun != wantRun {
 		t.Fatalf("Invoke() run = %#v, persisted = %#v, want %#v", run, createdRun, wantRun)
 	}
 	message, ok := createdEvent.Payload.(alfred.MessageAdded)
@@ -100,8 +105,7 @@ func TestInvokeCreatesSessionAndDispatchesQueuedRun(t *testing.T) {
 func TestInvokeReusesSessionInRequestedProject(t *testing.T) {
 	createdAt := time.Now()
 	dispatcher := mocks.NewMockRunDispatcher(gomock.NewController(t))
-	sessionIDs := &idGenerator[alfred.SessionID]{id: "session-unused"}
-	service, dependencies := newTestServiceWithSessionIDs(t, dispatcher, sessionIDs)
+	service, dependencies := newTestService(t, dispatcher)
 	dependencies.projects.EXPECT().GetProject(gomock.Any(), alfred.ProjectID("project-1")).Return(
 		alfred.Project{ID: "project-1"},
 		nil,
@@ -111,7 +115,12 @@ func TestInvokeReusesSessionInRequestedProject(t *testing.T) {
 	dependencies.invocations.EXPECT().CreateInvocation(gomock.Any(), gomock.Any()).Return(nil)
 	dependencies.runs.EXPECT().CreateRun(gomock.Any(), gomock.Any()).Return(nil)
 	dependencies.events.EXPECT().Append(gomock.Any(), gomock.Any()).Return(alfred.RunEvent{}, nil)
-	dispatcher.EXPECT().Dispatch(gomock.Any(), alfred.RunID("run-1")).Return(nil)
+	dispatcher.EXPECT().Dispatch(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, id alfred.RunID) error {
+		if id == "" {
+			t.Fatal("dispatched an empty run ID")
+		}
+		return nil
+	})
 
 	run, err := service.Invoke(t.Context(), alfred.InvocationRequest{
 		ProjectID: "project-1",
@@ -120,9 +129,6 @@ func TestInvokeReusesSessionInRequestedProject(t *testing.T) {
 	}, createdAt)
 	if err != nil {
 		t.Fatalf("Invoke() error = %v", err)
-	}
-	if sessionIDs.calls != 0 {
-		t.Fatalf("session ID generator calls = %d, want 0", sessionIDs.calls)
 	}
 	if run.SessionID != session.ID {
 		t.Fatalf("Invoke() session ID = %q, want %q", run.SessionID, session.ID)
@@ -173,7 +179,7 @@ func TestInvokeReturnsOnlyErrorWhenDispatchFails(t *testing.T) {
 	expectNewSessionInvocation(t, dependencies)
 	dependencies.runs.EXPECT().CreateRun(gomock.Any(), gomock.Any()).Return(nil)
 	dependencies.events.EXPECT().Append(gomock.Any(), gomock.Any()).Return(alfred.RunEvent{}, nil)
-	dispatcher.EXPECT().Dispatch(gomock.Any(), alfred.RunID("run-1")).Return(dispatchErr)
+	dispatcher.EXPECT().Dispatch(gomock.Any(), gomock.Any()).Return(dispatchErr)
 
 	run, err := service.Invoke(t.Context(), alfred.InvocationRequest{ProjectID: "project-1"}, createdAt)
 	if !errors.Is(err, dispatchErr) {
@@ -212,19 +218,6 @@ func newTestService(
 	dispatcher alfred.RunDispatcher,
 ) (*Service, testDependencies) {
 	t.Helper()
-	return newTestServiceWithSessionIDs(
-		t,
-		dispatcher,
-		&idGenerator[alfred.SessionID]{id: "session-1"},
-	)
-}
-
-func newTestServiceWithSessionIDs(
-	t *testing.T,
-	dispatcher alfred.RunDispatcher,
-	sessionIDs alfred.IDGenerator[alfred.SessionID],
-) (*Service, testDependencies) {
-	t.Helper()
 	controller := gomock.NewController(t)
 	dependencies := testDependencies{
 		projects:    mocks.NewMockProjectStore(controller),
@@ -236,16 +229,14 @@ func newTestServiceWithSessionIDs(
 	selection := mocks.NewMockModelSelectionStore(controller)
 	selection.EXPECT().GetSelectedModel(gomock.Any()).Return(alfred.ModelRef{ProviderID: "provider-1", ModelID: "model-1"}, nil).AnyTimes()
 	return NewService(Dependencies{
-		ModelSelection:        selection,
-		Projects:              dependencies.projects,
-		Sessions:              dependencies.sessions,
-		Invocations:           dependencies.invocations,
-		Runs:                  dependencies.runs,
-		InvocationIDGenerator: &idGenerator[alfred.InvocationID]{id: "invocation-1"},
-		SessionIDGenerator:    sessionIDs,
-		RunIDGenerator:        &idGenerator[alfred.RunID]{id: "run-1"},
-		Dispatcher:            dispatcher,
-		Events:                dependencies.events,
+		ModelSelection: selection,
+		Projects:       dependencies.projects,
+		Sessions:       dependencies.sessions,
+		Invocations:    dependencies.invocations,
+		Runs:           dependencies.runs,
+
+		Dispatcher: dispatcher,
+		Events:     dependencies.events,
 	}), dependencies
 }
 
@@ -257,18 +248,6 @@ func expectNewSessionInvocation(t *testing.T, dependencies testDependencies) {
 	)
 	dependencies.sessions.EXPECT().CreateSession(gomock.Any(), gomock.Any()).Return(nil)
 	dependencies.invocations.EXPECT().CreateInvocation(gomock.Any(), gomock.Any()).Return(nil)
-}
-
-// mockgen cannot generate the generic IDGenerator interface.
-type idGenerator[T ~string] struct {
-	id    T
-	err   error
-	calls int
-}
-
-func (generator *idGenerator[T]) New() (T, error) {
-	generator.calls++
-	return generator.id, generator.err
 }
 
 func TestInvokeWithoutSelectedModelDoesNotCreateSessionOrRun(t *testing.T) {

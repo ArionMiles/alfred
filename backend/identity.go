@@ -1,10 +1,5 @@
 package alfred
 
-// IDGenerator creates strongly typed identifiers.
-type IDGenerator[T ~string] interface {
-	New() (T, error)
-}
-
 // InvocationID identifies an invocation.
 type InvocationID string
 

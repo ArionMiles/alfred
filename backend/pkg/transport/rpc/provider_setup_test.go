@@ -14,7 +14,6 @@ import (
 	"github.com/ArionMiles/alfred"
 	alfredv1 "github.com/ArionMiles/alfred/gen/alfred/v1"
 	"github.com/ArionMiles/alfred/gen/alfred/v1/alfredv1connect"
-	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/providers"
 	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
 )
@@ -147,7 +146,7 @@ func newProviderSetupTestClient(t *testing.T, definitions []alfred.ProviderDefin
 	if err != nil {
 		t.Fatal(err)
 	}
-	submitter := providers.NewSubmitter(setup, store, identity.Generator[alfred.CredentialRef]{})
+	submitter := providers.NewSubmitter(setup, store)
 	server := httptest.NewServer(NewServer(Handlers{
 		Models: alfredv1connect.UnimplementedModelServiceHandler{},
 		Daemon: alfredv1connect.UnimplementedDaemonServiceHandler{}, Project: alfredv1connect.UnimplementedProjectServiceHandler{},

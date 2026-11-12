@@ -18,6 +18,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/ArionMiles/alfred"
+	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
@@ -62,8 +63,6 @@ type authorizationStore interface {
 type AuthorizationDependencies struct {
 	Store       authorizationStore
 	Credentials alfred.CredentialProvider
-	IDs         alfred.IDGenerator[alfred.ProviderAuthorizationID]
-	References  alfred.IDGenerator[alfred.CredentialRef]
 	HTTPClient  *http.Client
 }
 
@@ -72,8 +71,6 @@ type AuthorizationService struct {
 	config      AuthorizationConfig
 	store       authorizationStore
 	credentials alfred.CredentialProvider
-	ids         alfred.IDGenerator[alfred.ProviderAuthorizationID]
-	references  alfred.IDGenerator[alfred.CredentialRef]
 	client      *http.Client
 	lifecycle   context.Context
 	agentName   string
@@ -138,7 +135,6 @@ func NewAuthorizationService(
 ) *AuthorizationService {
 	service := &AuthorizationService{
 		config: config, store: dependencies.Store, credentials: dependencies.Credentials,
-		ids: dependencies.IDs, references: dependencies.References,
 		client: dependencies.HTTPClient, lifecycle: ctx,
 		attempts:  make(map[alfred.ProviderAuthorizationID]*authorizationAttempt),
 		agentName: "Alfred",
@@ -171,10 +167,7 @@ func (service *AuthorizationService) Start(
 	if err != nil {
 		return alfred.ProviderAuthorization{}, errors.B.Op(op).Text("load OpenAI agent host ID").Err(err).Build()
 	}
-	id, err := service.ids.New()
-	if err != nil || id == "" {
-		return alfred.ProviderAuthorization{}, errors.B.Op(op).Text("generate authorization ID").Err(err).Build()
-	}
+	id := identity.New[alfred.ProviderAuthorizationID]()
 	state := rand.Text()
 	nonce := rand.Text()
 	verifier := oauth2.GenerateVerifier()
@@ -587,10 +580,7 @@ func (service *AuthorizationService) save(
 	if err != nil {
 		return errors.B.Op(op).Text("encode OpenAI credential").Err(err).Build()
 	}
-	ref, err := service.references.New()
-	if err != nil || ref == "" || ref == instance.CredentialRef {
-		return errors.B.Op(op).Text("generate fresh credential reference").Err(err).Build()
-	}
+	ref := identity.New[alfred.CredentialRef]()
 	if err := service.credentials.PutCredential(ctx, ref, data); err != nil {
 		return errors.B.Op(op).Text("write OpenAI credential").Err(err).Build()
 	}

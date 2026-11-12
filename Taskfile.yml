@@ -72,17 +72,12 @@ tasks:
           if ! rg -q '^type [A-Za-z0-9_]+(\[[^]]+\])? interface' "$source"; then
             continue
           fi
-          exclusions=
-          if test "$source" = identity.go; then
-            exclusions=-exclude_interfaces=IDGenerator
-          fi
           destination="mocks/${source%.go}_mock.go"
           go tool mockgen \
             -source="$source" \
             -destination="$destination" \
             -package=mocks \
-            -typed \
-            $exclusions
+            -typed
         done
       - go tool mockgen -source=pkg/tools/web.go -destination=mocks/search_mock.go -package=mocks -typed -exclude_interfaces=searchSettingsReader
   proto:generate:

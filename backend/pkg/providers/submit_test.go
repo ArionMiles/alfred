@@ -11,7 +11,6 @@ import (
 
 	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/mocks"
-	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/providers"
 	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
@@ -127,7 +126,7 @@ func newSubmitter(t *testing.T) (*sqlite.Store, *providers.Submitter) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return store, providers.NewSubmitter(setup, store, identity.Generator[alfred.CredentialRef]{})
+	return store, providers.NewSubmitter(setup, store)
 }
 
 func apiKeySubmission() alfred.ProviderSetupSubmission {

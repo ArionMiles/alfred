@@ -11,9 +11,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectinprocess"
 
-	"github.com/ArionMiles/alfred"
 	"github.com/ArionMiles/alfred/gen/alfred/v1/alfredv1connect"
-	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
 	"github.com/ArionMiles/alfred/pkg/tools"
 	"github.com/ArionMiles/alfred/pkg/transport/rpc"
@@ -123,7 +121,7 @@ func newSearchTestModel(t *testing.T) (Model, *sqlite.Store) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	server := connect.NewServer()
-	alfredv1connect.RegisterSearchSetupServiceHandler(server, rpc.NewSearchSetupHandler(tools.NewSearchSetup(tools.SearchSetupDefinitions(), store, store, identity.Generator[alfred.CredentialRef]{})))
+	alfredv1connect.RegisterSearchSetupServiceHandler(server, rpc.NewSearchSetupHandler(tools.NewSearchSetup(tools.SearchSetupDefinitions(), store, store)))
 	model := readyModel(t)
 	model.clients = rpc.NewClients(connect.NewClient(connectinprocess.New(server)))
 	resized, _ := model.Update(tea.WindowSizeMsg{Width: 90, Height: 24})

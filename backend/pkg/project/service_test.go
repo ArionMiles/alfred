@@ -1,6 +1,7 @@
 package project
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ func TestResolveProjectReturnsExistingCanonicalRoot(t *testing.T) {
 	controller := gomock.NewController(t)
 	projects := mocks.NewMockProjectStore(controller)
 	projects.EXPECT().GetProjectByRoot(gomock.Any(), root).Return(want, nil)
-	service := NewService(projects, nil)
+	service := NewService(projects)
 
 	got, err := service.ResolveProject(t.Context(), root, time.Time{})
 	if err != nil {
@@ -47,21 +48,26 @@ func TestResolveProjectCreatesUnknownRoot(t *testing.T) {
 		alfred.Project{},
 		errors.B.KindNotFound().Build(),
 	)
-	projects.EXPECT().CreateProject(gomock.Any(), want).Return(nil)
-	service := NewService(projects, projectIDGenerator{id: want.ID})
+	var persisted alfred.Project
+	projects.EXPECT().CreateProject(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, project alfred.Project) error {
+		persisted = project
+		return nil
+	})
+	service := NewService(projects)
 
 	got, err := service.ResolveProject(t.Context(), root, createdAt)
 	if err != nil {
 		t.Fatalf("ResolveProject() error = %v", err)
 	}
-	if got != want {
+	want.ID = got.ID
+	if got.ID == "" || got != want || got != persisted {
 		t.Fatalf("ResolveProject() = %#v, want %#v", got, want)
 	}
 }
 
 func TestResolveProjectRejectsMissingRoot(t *testing.T) {
 	t.Parallel()
-	service := NewService(nil, nil)
+	service := NewService(nil)
 
 	_, err := service.ResolveProject(t.Context(), filepath.Join(t.TempDir(), "missing"), time.Time{})
 	if errors.WhatKind(err) != errors.InvalidArgument {
@@ -84,7 +90,7 @@ func TestResolveProjectReturnsConcurrentCreationWinner(t *testing.T) {
 		errors.B.KindConflict().Build(),
 	)
 	projects.EXPECT().GetProjectByRoot(gomock.Any(), root).Return(winner, nil)
-	service := NewService(projects, projectIDGenerator{id: "project-loser"})
+	service := NewService(projects)
 
 	got, err := service.ResolveProject(t.Context(), root, createdAt)
 	if err != nil {
@@ -102,12 +108,4 @@ func canonicalTestRoot(t *testing.T) string {
 		t.Fatalf("EvalSymlinks() error = %v", err)
 	}
 	return root
-}
-
-type projectIDGenerator struct {
-	id alfred.ProjectID
-}
-
-func (generator projectIDGenerator) New() (alfred.ProjectID, error) {
-	return generator.id, nil
 }

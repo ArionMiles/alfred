@@ -19,7 +19,6 @@ import (
 	alfredv1 "github.com/ArionMiles/alfred/gen/alfred/v1"
 	"github.com/ArionMiles/alfred/gen/alfred/v1/alfredv1connect"
 	"github.com/ArionMiles/alfred/mocks"
-	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/invocation"
 	"github.com/ArionMiles/alfred/pkg/providers"
 	"github.com/ArionMiles/alfred/pkg/providers/openai"
@@ -151,7 +150,7 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	submitter := providers.NewSubmitter(setup, store, identity.Generator[alfred.CredentialRef]{})
+	submitter := providers.NewSubmitter(setup, store)
 	if _, err := submitter.Submit(t.Context(), store, alfred.ProviderSetupSubmission{
 		Type: "openai", MethodID: "api-key", Values: map[string]string{"api_key": "test-model-secret"},
 	}); err != nil {
@@ -174,10 +173,10 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
 	modelService := providers.NewModelService(store, registry, store)
 	dispatcher := mocks.NewMockRunDispatcher(gomock.NewController(t))
 	dispatcher.EXPECT().Dispatch(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	events := jsonl.New(jsonl.Config{DataDir: t.TempDir(), LockShardCount: 64}, store, store, identity.Generator[alfred.RunEventID]{})
+	events := jsonl.New(jsonl.Config{DataDir: t.TempDir(), LockShardCount: 64}, store, store)
 	invocations := invocation.NewService(invocation.Dependencies{
 		ModelSelection: store, Projects: store, Sessions: store, Invocations: store, Runs: store,
-		InvocationIDGenerator: identity.Generator[alfred.InvocationID]{}, SessionIDGenerator: identity.Generator[alfred.SessionID]{}, RunIDGenerator: identity.Generator[alfred.RunID]{},
+
 		Dispatcher: dispatcher, Events: events,
 	})
 	server := httptest.NewServer(NewServer(Handlers{

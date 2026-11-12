@@ -8,12 +8,12 @@ import (
 	"github.com/ArionMiles/alfred"
 )
 
-func TestGeneratorCreatesOpaqueFilesystemSafeID(t *testing.T) {
+func TestNewCreatesOpaqueFilesystemSafeID(t *testing.T) {
 	t.Parallel()
 
-	id, err := (Generator[alfred.SessionID]{}).New()
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
+	id := New[alfred.SessionID]()
+	if other := New[alfred.SessionID](); other == id {
+		t.Fatalf("New() reused ID %q", id)
 	}
 	value := string(id)
 	if value == "" || value == "." || value == ".." || strings.ContainsAny(value, `/\`) {
@@ -27,5 +27,3 @@ func TestGeneratorCreatesOpaqueFilesystemSafeID(t *testing.T) {
 		t.Fatalf("New() decoded bytes = %d, want at least 16", len(decoded))
 	}
 }
-
-var _ alfred.IDGenerator[alfred.RunID] = Generator[alfred.RunID]{}

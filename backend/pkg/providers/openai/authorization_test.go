@@ -23,7 +23,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ArionMiles/alfred"
-	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/providers/openai"
 	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
@@ -621,12 +620,6 @@ func (fixture *oauthFixture) serveHTTP(writer http.ResponseWriter, request *http
 	}
 }
 
-type authorizationIDGenerator struct{}
-
-func (authorizationIDGenerator) New() (alfred.ProviderAuthorizationID, error) {
-	return "authorization-1", nil
-}
-
 func newAuthorizationStore(t *testing.T) *sqlite.Store {
 	t.Helper()
 	store, err := sqlite.Open(t.Context(), sqlite.Config{Path: filepath.Join(t.TempDir(), "alfred.db"), BusyTimeout: time.Second})
@@ -653,7 +646,7 @@ func newAuthorizationService(t *testing.T, fixture *oauthFixture, store *sqlite.
 	config.AuthorizeURL = fixture.server.URL + "/authorize"
 	config.TokenURL = fixture.server.URL + "/token"
 	service := openai.NewAuthorizationService(t.Context(), config, openai.AuthorizationDependencies{
-		Store: store, Credentials: store, IDs: authorizationIDGenerator{}, References: identity.Generator[alfred.CredentialRef]{},
+		Store: store, Credentials: store,
 		HTTPClient: fixture.server.Client(),
 	}, options...)
 	t.Cleanup(service.Close)

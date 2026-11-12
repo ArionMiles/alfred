@@ -28,7 +28,7 @@ func TestRunnerPreservesCompletedOutputOrderInLiveContextAndReplay(t *testing.T)
 	opaqueNative := alfred.NativeData{"test.reasoning.v1": json.RawMessage(`{"state":"opaque-after"}`)}
 	messageNative := alfred.NativeData{"test.text.v1": json.RawMessage(`{"phase":"commentary"}`)}
 	callNative := alfred.NativeData{"test.call.v1": json.RawMessage(`{"signature":"call-proof"}`)}
-	fixture.modelCallIDs.ids = []alfred.ModelCallID{"model-call-1", "model-call-2"}
+
 	fixture.provider.streams = [][]alfred.ModelEvent{
 		{
 			{Payload: alfred.ModelReasoning{Reasoning: reasoning}, Native: reasoningNative},
@@ -62,7 +62,7 @@ func TestRunnerPreservesCompletedOutputOrderInLiveContextAndReplay(t *testing.T)
 	var transcript []alfred.Message
 	for _, event := range fixture.events.snapshot() {
 		if added, ok := event.Payload.(alfred.MessageAdded); ok {
-			if added.ModelCallID != "model-call-1" {
+			if added.ModelCallID != requests[0].ID {
 				t.Fatal("transcript message was not associated with its committed output")
 			}
 			transcript = append(transcript, added.Message)

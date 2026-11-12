@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ArionMiles/alfred"
+	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
@@ -35,12 +36,11 @@ type Config struct {
 // Store appends and reads the authoritative JSONL history for each session.
 // It serializes sequence assignment and append when requests overlap for a session.
 type Store struct {
-	dataDir          string
-	runs             runReader
-	sessions         sessionReader
-	eventIDGenerator alfred.IDGenerator[alfred.RunEventID]
-	lockSeed         maphash.Seed
-	locks            []sync.Mutex
+	dataDir  string
+	runs     runReader
+	sessions sessionReader
+	lockSeed maphash.Seed
+	locks    []sync.Mutex
 }
 
 // New creates a JSONL event store from runtime configuration and dependencies.
@@ -48,15 +48,13 @@ func New(
 	config Config,
 	runs runReader,
 	sessions sessionReader,
-	eventIDGenerator alfred.IDGenerator[alfred.RunEventID],
 ) *Store {
 	return &Store{
-		dataDir:          config.DataDir,
-		runs:             runs,
-		sessions:         sessions,
-		eventIDGenerator: eventIDGenerator,
-		lockSeed:         maphash.MakeSeed(),
-		locks:            make([]sync.Mutex, config.LockShardCount),
+		dataDir:  config.DataDir,
+		runs:     runs,
+		sessions: sessions,
+		lockSeed: maphash.MakeSeed(),
+		locks:    make([]sync.Mutex, config.LockShardCount),
 	}
 }
 
@@ -99,10 +97,7 @@ func (store *Store) Append(ctx context.Context, pending alfred.NewRunEvent) (alf
 	if err != nil {
 		return alfred.RunEvent{}, errors.B.Op(op).Textf("read sequence from %q", path).Err(err).Build()
 	}
-	eventID, err := store.eventIDGenerator.New()
-	if err != nil {
-		return alfred.RunEvent{}, errors.B.Op(op).Text("generate event ID").Err(err).Build()
-	}
+	eventID := identity.New[alfred.RunEventID]()
 	event := alfred.RunEvent{
 		ID:         eventID,
 		SessionID:  session.ID,

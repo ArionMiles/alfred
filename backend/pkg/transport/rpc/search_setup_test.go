@@ -16,7 +16,6 @@ import (
 	"github.com/ArionMiles/alfred"
 	alfredv1 "github.com/ArionMiles/alfred/gen/alfred/v1"
 	"github.com/ArionMiles/alfred/gen/alfred/v1/alfredv1connect"
-	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/providers"
 	"github.com/ArionMiles/alfred/pkg/storage/sqlite"
 	"github.com/ArionMiles/alfred/pkg/tools"
@@ -34,14 +33,14 @@ func TestSearchSetupIsSeparateFromModelProvidersAndFeedsExa(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	setup := tools.NewSearchSetup(tools.SearchSetupDefinitions(), store, store, identity.Generator[alfred.CredentialRef]{})
+	setup := tools.NewSearchSetup(tools.SearchSetupDefinitions(), store, store)
 	server := connect.NewServer()
 	alfredv1connect.RegisterSearchSetupServiceHandler(server, NewSearchSetupHandler(setup))
 	modelSetup, err := providers.NewSetupService(providers.SetupDefinitions())
 	if err != nil {
 		t.Fatal(err)
 	}
-	alfredv1connect.RegisterProviderSetupServiceHandler(server, NewProviderSetupHandler(modelSetup, providers.NewSubmitter(modelSetup, store, identity.Generator[alfred.CredentialRef]{}), store, nil))
+	alfredv1connect.RegisterProviderSetupServiceHandler(server, NewProviderSetupHandler(modelSetup, providers.NewSubmitter(modelSetup, store), store, nil))
 	clients := NewClients(connect.NewClient(connectinprocess.New(server)))
 	definitions, err := clients.ProviderSetup.ListProviderDefinitions(t.Context(), &alfredv1.ListProviderDefinitionsRequest{})
 	if err != nil {
@@ -114,7 +113,7 @@ func TestSearchFormPrefillsOnlyNonSecretFields(t *testing.T) {
 	definition := alfred.SearchBackendDefinition{ID: "search-test", Fields: []alfred.SetupField{
 		{ID: "api_key", Kind: alfred.SetupFieldSecret, Required: true}, {ID: "endpoint", Kind: alfred.SetupFieldText},
 	}}
-	setup := tools.NewSearchSetup([]alfred.SearchBackendDefinition{definition}, store, store, identity.Generator[alfred.CredentialRef]{})
+	setup := tools.NewSearchSetup([]alfred.SearchBackendDefinition{definition}, store, store)
 	if problems, err := setup.Save(t.Context(), definition.ID, map[string]string{"api_key": "secret", "endpoint": "https://example.org"}); err != nil || len(problems) != 0 {
 		t.Fatalf("save=%v err=%v", problems, err)
 	}

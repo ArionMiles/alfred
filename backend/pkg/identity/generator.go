@@ -3,10 +3,7 @@ package identity
 
 import "crypto/rand"
 
-// Generator creates cryptographically random, filesystem-safe identifiers.
-type Generator[T ~string] struct{}
-
-// New returns a new opaque identifier.
-func (Generator[T]) New() (T, error) {
-	return T(rand.Text()), nil
+// New returns a cryptographically random, filesystem-safe identifier.
+func New[T ~string]() T {
+	return T(rand.Text())
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ArionMiles/alfred"
+	"github.com/ArionMiles/alfred/pkg/identity"
 	"github.com/ArionMiles/alfred/pkg/x/errors"
 )
 
@@ -22,16 +23,14 @@ type setupTarget interface {
 type Submitter struct {
 	setup       *SetupService
 	credentials alfred.CredentialWriter
-	references  alfred.IDGenerator[alfred.CredentialRef]
 }
 
 // NewSubmitter composes metadata and credential persistence for onboarding.
 func NewSubmitter(
 	setup *SetupService,
 	credentials alfred.CredentialWriter,
-	references alfred.IDGenerator[alfred.CredentialRef],
 ) *Submitter {
-	return &Submitter{setup: setup, credentials: credentials, references: references}
+	return &Submitter{setup: setup, credentials: credentials}
 }
 
 // setupCredentialRecord is the setup consumer's credential format, independent
@@ -78,7 +77,7 @@ func (submitter *Submitter) Submit(
 	instance.Name = form.Method.InstanceName
 	settings, secrets := setupSettings(instance.Settings, form.Method, request.Values)
 	instance.Settings = settings
-	ref, err := submitter.saveCredential(ctx, request, instance.CredentialRef, secrets)
+	ref, err := submitter.saveCredential(ctx, request, secrets)
 	if err != nil {
 		return alfred.ProviderSetupResult{}, errors.B.Op(op).Text("save setup credential").Err(err).Build()
 	}
@@ -138,7 +137,6 @@ func (submitter *Submitter) persistInstance(
 func (submitter *Submitter) saveCredential(
 	ctx context.Context,
 	request alfred.ProviderSetupSubmission,
-	previous alfred.CredentialRef,
 	fields map[string]string,
 ) (alfred.CredentialRef, error) {
 	const op = "saveCredential"
@@ -150,13 +148,7 @@ func (submitter *Submitter) saveCredential(
 	if err != nil {
 		return "", errors.B.Op(op).Text("encode setup credential").Err(err).Build()
 	}
-	ref, err := submitter.references.New()
-	if err != nil {
-		return "", errors.B.Op(op).Text("generate credential reference").Err(err).Build()
-	}
-	if ref == "" || ref == previous {
-		return "", errors.B.Op(op).KindConflict().Text("credential generator did not return a fresh reference").Build()
-	}
+	ref := identity.New[alfred.CredentialRef]()
 	if err := submitter.credentials.PutCredential(ctx, ref, data); err != nil {
 		return "", errors.B.Op(op).Text("write setup credential").Err(err).Build()
 	}
