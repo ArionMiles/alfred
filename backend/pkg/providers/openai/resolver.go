@@ -39,11 +39,15 @@ func NewResolver(
 	credentials alfred.CredentialReader,
 	subscription *SubscriptionCredentials,
 	catalog modelCatalog,
-	inferenceClient *http.Client,
+	options ...HTTPOption,
 ) *Resolver {
+	transportOptions := httpOptions{client: &http.Client{}}
+	for _, option := range options {
+		option(&transportOptions)
+	}
 	return &Resolver{
 		instances: instances, credentials: credentials, subscription: subscription,
-		catalog: catalog, inferenceClient: inferenceClient,
+		catalog: catalog, inferenceClient: transportOptions.client,
 	}
 }
 
@@ -75,7 +79,7 @@ func (resolver *Resolver) ResolveProvider(ctx context.Context, id alfred.Provide
 		if err != nil {
 			return nil, errors.B.Op(op).Text("load provider model metadata").Err(err).Build()
 		}
-		return New(instance.ID, config, models, resolver.inferenceClient), nil
+		return New(instance.ID, config, models, WithHTTPClient(resolver.inferenceClient)), nil
 	case chatGPTSubscriptionMethod:
 		if resolver.subscription == nil {
 			return nil, errors.B.Op(op).KindFailedPrecondition().Retryable(true).
@@ -96,8 +100,7 @@ func (resolver *Resolver) ResolveProvider(ctx context.Context, id alfred.Provide
 		return NewSubscription(
 			instance.ID, config, models, SubscriptionDependencies{
 				Credentials: resolver.subscription, CredentialRef: instance.CredentialRef,
-				HTTPClient: resolver.inferenceClient,
-			},
+			}, WithHTTPClient(resolver.inferenceClient),
 		), nil
 	default:
 		return nil, errors.B.Op(op).KindFailedPrecondition().Retryable(true).

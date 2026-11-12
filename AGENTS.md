@@ -117,8 +117,9 @@ the first client; web and native iOS clients will follow. Read
 - Keep file discovery, decoding, and startup resolution in `internal/config`.
   Its `C` struct composes settings and static defaults; `Load` applies defaults,
   files, and explicitly supported environment overrides and validates the result.
-  Derive component paths in `main.go` rather than populating duplicate paths in
-  the aggregate. Omit path-only component configs from `C`.
+  Supply component directories in `main.go` rather than populating duplicate paths
+  in the aggregate. Components own their cache filenames and layout. Omit
+  path-only component configs from `C`.
   The TUI owns its configuration types, default tags, and validation. Apply saved
   theme overrides within the TUI; the config package must not access the database.
   File values are literal, with no environment references. `ALFRED_CONFIG_FILE`

@@ -9,7 +9,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
@@ -154,15 +153,12 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 	if err != nil {
 		return nil, errors.B.Op(op).Text("resolve user home").Err(err).Build()
 	}
-	catalogConfig := settings.Catalog
-	catalogConfig.CacheFile = filepath.Join(settings.DataDir, "models.dev.json")
-	webClient := &http.Client{Timeout: 30 * time.Second}
-	searchTool, err := tools.NewWebSearch(settings.Tools.WebSearch, tools.NewExa("https://api.exa.ai/search", store, store, webClient))
+	searchTool, err := tools.NewWebSearch(settings.Tools.WebSearch, tools.NewExa(settings.Tools.WebSearch.Exa, store, store))
 	if err != nil {
 		return nil, errors.B.Op(op).Text("create web search").Err(err).Build()
 	}
 	toolRegistry, err := tools.NewRegistry(tools.NewRead(), tools.NewGrep(), tools.NewGlob(), tools.NewEdit(),
-		tools.NewShell(settings.Tools.Shell, userHome), tools.NewAskUser(), tools.NewWebFetch(webClient), searchTool)
+		tools.NewShell(settings.Tools.Shell, userHome), tools.NewAskUser(), tools.NewWebFetch(settings.Tools.WebFetch), searchTool)
 	if err != nil {
 		return nil, errors.B.Op(op).Text("create tool registry").Err(err).Build()
 	}
@@ -171,10 +167,9 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 		providers.WithConfiguredProviders(openaiAuthorization.NewResolver(
 			store, store,
 			openaiAuthorization.NewSubscriptionCredentials(
-				store, settings.OpenAIAuthorization, webClient,
+				store, settings.OpenAIAuthorization,
 			),
-			providers.NewCatalogSource(catalogConfig, &http.Client{Timeout: 15 * time.Second}),
-			http.DefaultClient,
+			providers.NewCatalogSource(settings.Catalog, settings.DataDir),
 		)),
 		providers.WithMiddleware(telemetry.ModelCalls(eventSink)),
 	)
@@ -221,7 +216,6 @@ func compose(ctx context.Context, settings config.C) (app *application, err erro
 		settings.OpenAIAuthorization,
 		openaiAuthorization.AuthorizationDependencies{
 			Store: store, Credentials: store,
-			HTTPClient: webClient,
 		},
 	)
 	defer func() {

@@ -45,9 +45,13 @@ func (record oauthCredentialRecord) needsRefresh(now time.Time) bool {
 func NewSubscriptionCredentials(
 	credentials alfred.CredentialProvider,
 	config AuthorizationConfig,
-	client *http.Client,
+	options ...HTTPOption,
 ) *SubscriptionCredentials {
-	return &SubscriptionCredentials{credentials: credentials, config: config, client: client}
+	transportOptions := httpOptions{client: &http.Client{Timeout: config.RequestTimeout}}
+	for _, option := range options {
+		option(&transportOptions)
+	}
+	return &SubscriptionCredentials{credentials: credentials, config: config, client: transportOptions.client}
 }
 
 // AccessToken returns a usable bearer token, refreshing and atomically replacing

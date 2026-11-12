@@ -22,7 +22,7 @@ const reasoningJSON = `{"type":"reasoning","id":"rs_1","summary":[{"type":"summa
 func TestStreamAndReplayOrderedResponse(t *testing.T) {
 	t.Parallel()
 	requests := make(chan map[string]json.RawMessage, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/v1/responses" || request.Method != http.MethodPost || request.Header.Get("Authorization") != "Bearer test-key" {
 			t.Error("unexpected request endpoint, method, or credential")
 		}
@@ -268,7 +268,7 @@ func testProvider(server *httptest.Server) *Provider {
 	config.APIKey, config.BaseURL = "test-key", server.URL+"/v1"
 	return New("openai", config, []alfred.ModelInfo{{
 		Ref: alfred.ModelRef{ModelID: "test-model"}, Capabilities: alfred.ModelCapabilities{Reasoning: true},
-	}}, server.Client())
+	}}, WithHTTPClient(server.Client()))
 }
 
 func testRequest() alfred.ModelRequest {

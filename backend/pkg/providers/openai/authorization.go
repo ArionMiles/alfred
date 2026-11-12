@@ -45,11 +45,12 @@ var authorizationScopes = []string{
 
 // AuthorizationConfig contains OpenAI's public authorization endpoints.
 type AuthorizationConfig struct {
-	Issuer       string `default:"https://auth.openai.com"`
-	AuthorizeURL string `default:"https://auth.openai.com/api/accounts/authorize"`
-	TokenURL     string `default:"https://auth.openai.com/api/accounts/oauth/token"`
-	Resource     string `default:"https://api.openai.com/v1"`
-	CallbackPath string `default:"/auth/callback"`
+	Issuer         string        `default:"https://auth.openai.com"`
+	AuthorizeURL   string        `default:"https://auth.openai.com/api/accounts/authorize"`
+	TokenURL       string        `default:"https://auth.openai.com/api/accounts/oauth/token"`
+	Resource       string        `default:"https://api.openai.com/v1"`
+	CallbackPath   string        `default:"/auth/callback"`
+	RequestTimeout time.Duration `default:"30s"`
 }
 
 type authorizationStore interface {
@@ -63,7 +64,6 @@ type authorizationStore interface {
 type AuthorizationDependencies struct {
 	Store       authorizationStore
 	Credentials alfred.CredentialProvider
-	HTTPClient  *http.Client
 }
 
 // AuthorizationService owns pending local callbacks and the resulting credentials.
@@ -135,7 +135,7 @@ func NewAuthorizationService(
 ) *AuthorizationService {
 	service := &AuthorizationService{
 		config: config, store: dependencies.Store, credentials: dependencies.Credentials,
-		client: dependencies.HTTPClient, lifecycle: ctx,
+		client: &http.Client{Timeout: config.RequestTimeout}, lifecycle: ctx,
 		attempts:  make(map[alfred.ProviderAuthorizationID]*authorizationAttempt),
 		agentName: "Alfred",
 	}

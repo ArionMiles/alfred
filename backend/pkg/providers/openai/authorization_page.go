@@ -11,8 +11,13 @@ var authorizationHTML string
 
 var authorizationTemplate = template.Must(template.New("authorization").Parse(authorizationHTML))
 
-// AuthorizationOption configures presentation when composing the application.
+// AuthorizationOption customizes browser authorization when composing the application.
 type AuthorizationOption func(*AuthorizationService)
+
+// WithAuthorizationHTTPClient replaces the authorization service's default HTTP client.
+func WithAuthorizationHTTPClient(client *http.Client) AuthorizationOption {
+	return func(service *AuthorizationService) { service.client = client }
+}
 
 // WithSuccessHTML replaces the successful authorization page with caller-supplied
 // static HTML. It is served verbatim only after credentials and plan permission

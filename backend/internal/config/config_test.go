@@ -28,6 +28,9 @@ func TestLoadResolvesSettings(t *testing.T) {
 		got.Daemon.StartupTimeout != 10*time.Second || got.SQLite.BusyTimeout != 5*time.Second ||
 		got.History.LockShardCount != 64 || got.Catalog.MaxAge != 24*time.Hour ||
 		got.Catalog.URL != "https://models.dev/api.json" || got.Skills.SystemRoot != "/etc/alfred/skills" ||
+		got.Catalog.CacheFileName != "models.dev.json" || got.Catalog.RequestTimeout != 15*time.Second ||
+		got.Tools.WebSearch.Exa.Endpoint != "https://api.exa.ai/search" || got.Tools.WebSearch.Exa.RequestTimeout != 30*time.Second ||
+		got.Tools.WebFetch.RequestTimeout != 30*time.Second || got.OpenAIAuthorization.RequestTimeout != 30*time.Second ||
 		got.OpenAIAuthorization.CallbackPath != "/auth/callback" || got.OpenAIAuthorization.TokenURL == "" {
 		t.Fatalf("dependency defaults = %+v", got)
 	}
@@ -79,7 +82,11 @@ func TestLoadDoesNotExposeInternalSettings(t *testing.T) {
 	if err != nil || got.SQLite.BusyTimeout != 5*time.Second || got.OpenAIAuthorization.TokenURL != "https://auth.openai.com/api/accounts/oauth/token" {
 		t.Fatalf("internal environment setting exposed: %+v, %v", got, err)
 	}
-	for _, source := range []string{"[sqlite]\nbusy_timeout = '99s'\n", "[daemon]\nstartup_timeout = '99s'\n", "[openai_authorization]\ntoken_url = 'http://unexpected.example'\n"} {
+	for _, source := range []string{
+		"[sqlite]\nbusy_timeout = '99s'\n", "[daemon]\nstartup_timeout = '99s'\n", "[openai_authorization]\ntoken_url = 'http://unexpected.example'\n",
+		"[tools.web_search.exa]\nendpoint = 'http://unexpected.example'\n",
+		"[tools.web_fetch]\nrequest_timeout = '1s'\n",
+	} {
 		writeConfig(t, filepath.Join(root, "config", "alfred", "config.toml"), source)
 		if _, err := config.Load(); err == nil {
 			t.Fatalf("internal file setting accepted: %s", source)

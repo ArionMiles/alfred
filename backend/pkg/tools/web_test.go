@@ -66,7 +66,7 @@ func TestExaUsesSavedCredentialsAndDoesNotExposeRemoteErrors(t *testing.T) {
 		_, _ = writer.Write([]byte(`{"results":[{"title":"Result","url":"https://example.org","text":"Excerpt"}]}`))
 	}))
 	t.Cleanup(server.Close)
-	provider := tools.NewExa(server.URL, store, store, server.Client())
+	provider := tools.NewExa(tools.ExaConfig{Endpoint: server.URL}, store, store, tools.WithHTTPClient(server.Client()))
 	if _, err := provider.Search(t.Context(), "query", 3); err == nil {
 		t.Fatal("search without setup succeeded")
 	}
@@ -92,7 +92,7 @@ func TestExaUsesSavedCredentialsAndDoesNotExposeRemoteErrors(t *testing.T) {
 		_, _ = writer.Write([]byte("rotated-key"))
 	}))
 	t.Cleanup(failed.Close)
-	_, err = tools.NewExa(failed.URL, store, store, failed.Client()).Search(t.Context(), "query", 3)
+	_, err = tools.NewExa(tools.ExaConfig{Endpoint: failed.URL}, store, store, tools.WithHTTPClient(failed.Client())).Search(t.Context(), "query", 3)
 	if err == nil || strings.Contains(err.Error(), "rotated-key") {
 		t.Fatalf("unsafe error=%v", err)
 	}
@@ -100,18 +100,22 @@ func TestExaUsesSavedCredentialsAndDoesNotExposeRemoteErrors(t *testing.T) {
 		http.Redirect(writer, request, server.URL, http.StatusFound)
 	}))
 	t.Cleanup(redirect.Close)
-	if _, err := tools.NewExa(redirect.URL, store, store, redirect.Client()).Search(t.Context(), "query", 3); err == nil {
+	client := redirect.Client()
+	if _, err := tools.NewExa(tools.ExaConfig{Endpoint: redirect.URL}, store, store, tools.WithHTTPClient(client)).Search(t.Context(), "query", 3); err == nil {
 		t.Fatal("credential-bearing request followed a redirect")
+	}
+	if client.CheckRedirect != nil {
+		t.Fatal("Exa modified the caller's HTTP client")
 	}
 }
 
 func TestWebFetchReturnsBoundedContentAndRejectsNonHTTPURLs(t *testing.T) {
 	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_, _ = writer.Write([]byte(strings.Repeat("content ", 20000)))
 	}))
 	t.Cleanup(server.Close)
-	tool := tools.NewWebFetch(server.Client())
+	tool := tools.NewWebFetch(tools.WebFetchConfig{}, tools.WithHTTPClient(server.Client()))
 	text := webInvoke(t, tool, map[string]any{"url": server.URL})
 	if !strings.Contains(text, "Output truncated") || len(text) > 66000 {
 		t.Fatal("fetch response was not bounded")
@@ -133,4 +137,26 @@ func webInvoke(t *testing.T, tool alfred.Tool, args any) string {
 		t.Fatal(err)
 	}
 	return result.Result.Output[0].(alfred.TextContent).Text
+}
+
+func TestWebFetchHonorsConfiguredRequestTimeout(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		<-request.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	tool := tools.NewWebFetch(tools.WebFetchConfig{RequestTimeout: 20 * time.Millisecond})
+	args, err := json.Marshal(map[string]string{"url": server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := tool.Invoke(ctx, alfred.ToolInvocation{Call: alfred.ToolCall{ID: "call", Arguments: args}})
+	if err != nil || ctx.Err() != nil {
+		t.Fatalf("fetch did not use its own timeout: error=%v, caller=%v", err, ctx.Err())
+	}
+	if text := result.Result.Output[0].(alfred.TextContent).Text; !strings.Contains(text, "Could not fetch URL") {
+		t.Fatalf("fetch timeout result = %q", text)
+	}
 }

@@ -198,7 +198,7 @@ func TestAuthorizationRetainsIdentityWithoutDirectTokenScope(t *testing.T) {
 	config := withDefaults[openai.AuthorizationConfig]()
 	config.Issuer = fixture.server.URL
 	config.TokenURL = fixture.server.URL + "/token"
-	manager := openai.NewSubscriptionCredentials(store, config, fixture.server.Client())
+	manager := openai.NewSubscriptionCredentials(store, config, openai.WithHTTPClient(fixture.server.Client()))
 	if _, err := manager.AccessToken(t.Context(), result.Instance.CredentialRef); errors.WhatKind(err) != errors.FailedPrecondition {
 		t.Fatalf("AccessToken() error = %v", err)
 	}
@@ -449,7 +449,7 @@ func TestReauthorizationReusesRegistrationAndPreservesConnectionOnFailure(t *tes
 				if after.CredentialRef == before.CredentialRef {
 					t.Fatal("reauthorization did not save fresh credentials")
 				}
-				manager := openai.NewSubscriptionCredentials(store, withDefaults[openai.AuthorizationConfig](), fixture.server.Client())
+				manager := openai.NewSubscriptionCredentials(store, withDefaults[openai.AuthorizationConfig](), openai.WithHTTPClient(fixture.server.Client()))
 				if _, err := manager.AccessToken(t.Context(), after.CredentialRef); err != nil {
 					t.Fatal(err)
 				}
@@ -541,7 +541,7 @@ func newOAuthFixture(t *testing.T, directScope bool) *oauthFixture {
 		t.Fatal(err)
 	}
 	fixture := &oauthFixture{privateKey: privateKey, directScope: directScope, subject: "account-subject"}
-	fixture.server = httptest.NewServer(http.HandlerFunc(fixture.serveHTTP))
+	fixture.server = httptest.NewTLSServer(http.HandlerFunc(fixture.serveHTTP))
 	t.Cleanup(fixture.server.Close)
 	return fixture
 }
@@ -645,9 +645,9 @@ func newAuthorizationService(t *testing.T, fixture *oauthFixture, store *sqlite.
 	config.Issuer = fixture.server.URL
 	config.AuthorizeURL = fixture.server.URL + "/authorize"
 	config.TokenURL = fixture.server.URL + "/token"
+	options = append([]openai.AuthorizationOption{openai.WithAuthorizationHTTPClient(fixture.server.Client())}, options...)
 	service := openai.NewAuthorizationService(t.Context(), config, openai.AuthorizationDependencies{
 		Store: store, Credentials: store,
-		HTTPClient: fixture.server.Client(),
 	}, options...)
 	t.Cleanup(service.Close)
 	return service

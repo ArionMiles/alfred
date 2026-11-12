@@ -16,28 +16,42 @@ import (
 )
 
 // CatalogConfig contains internal loader settings, not a public TOML schema.
-// CacheFile must be supplied by the application under its data directory.
+// The application supplies the cache directory separately from these settings.
 type CatalogConfig struct {
-	URL       string `default:"https://models.dev/api.json"`
-	CacheFile string
-	MaxAge    time.Duration `default:"24h"`
+	URL            string        `default:"https://models.dev/api.json"`
+	CacheFileName  string        `default:"models.dev.json"`
+	MaxAge         time.Duration `default:"24h"`
+	RequestTimeout time.Duration `default:"15s"`
 }
 
 // CatalogSource loads current model metadata using the shared catalog cache.
 type CatalogSource struct {
-	config CatalogConfig
-	client *http.Client
+	config   CatalogConfig
+	cacheDir string
+	client   *http.Client
+}
+
+// CatalogOption customizes model catalog loading.
+type CatalogOption func(*CatalogSource)
+
+// WithHTTPClient replaces the catalog's default HTTP client.
+func WithHTTPClient(client *http.Client) CatalogOption {
+	return func(source *CatalogSource) { source.client = client }
 }
 
 // NewCatalogSource configures catalog loading independently of inference transport.
-func NewCatalogSource(config CatalogConfig, client *http.Client) *CatalogSource {
-	return &CatalogSource{config: config, client: client}
+func NewCatalogSource(config CatalogConfig, cacheDir string, options ...CatalogOption) *CatalogSource {
+	source := &CatalogSource{config: config, cacheDir: cacheDir, client: &http.Client{Timeout: config.RequestTimeout}}
+	for _, option := range options {
+		option(source)
+	}
+	return source
 }
 
 // Models loads the catalog and returns published metadata for the requested provider.
 func (source *CatalogSource) Models(ctx context.Context, provider alfred.ProviderType) ([]alfred.ModelInfo, error) {
 	const op = "Models"
-	catalog, err := LoadCatalog(ctx, source.config, source.client)
+	catalog, err := LoadCatalog(ctx, source.config, source.cacheDir, source.client)
 	if err != nil {
 		return nil, errors.B.Op(op).Err(err).Build()
 	}
@@ -71,12 +85,13 @@ type catalogModel struct {
 // LoadCatalog reuses a fresh cache, otherwise fetches and atomically replaces
 // it. A valid stale cache remains usable when the source cannot be reached.
 // The complete source document, including pricing, is retained on disk.
-func LoadCatalog(ctx context.Context, config CatalogConfig, client *http.Client) (*Catalog, error) {
+func LoadCatalog(ctx context.Context, config CatalogConfig, cacheDir string, client *http.Client) (*Catalog, error) {
 	const op = "LoadCatalog"
 	if err := ctx.Err(); err != nil {
 		return nil, errors.B.Op(op).Err(err).Build()
 	}
-	cached, cachedAt := readCatalogCache(config.CacheFile)
+	cacheFile := filepath.Join(cacheDir, config.CacheFileName)
+	cached, cachedAt := readCatalogCache(cacheFile)
 	if cached != nil && time.Since(cachedAt) < config.MaxAge {
 		return cached, nil
 	}
@@ -97,7 +112,7 @@ func LoadCatalog(ctx context.Context, config CatalogConfig, client *http.Client)
 		}
 		return nil, errors.B.Op(op).Err(err).Build()
 	}
-	if err := writeCatalogCache(config.CacheFile, data); err != nil {
+	if err := writeCatalogCache(cacheFile, data); err != nil {
 		return nil, errors.B.Op(op).Err(err).Build()
 	}
 	return catalog, nil

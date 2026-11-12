@@ -36,9 +36,10 @@ timestamp for the whole operation.
 Application startup resolves one aggregate configuration before composition.
 Static defaults live on the owning settings structs and are applied before
 file values and explicitly named environment overrides. Loading resolves the
-application's configuration and data directories; composition derives database,
-history, catalog, and skill paths when constructing their components. The
-aggregate does not retain copies of those derived paths. Configuration types own
+application's configuration and data directories; composition supplies component
+directories and derives database, history, and skill paths. The model catalog
+owns its cache filename and resolves it within the supplied cache directory.
+The aggregate does not retain copies of derived paths. Configuration types own
 their validation rules;
 application loading calls their `Valid` methods before path normalization can
 hide invalid input. Constructors receive concrete settings without reading
@@ -48,6 +49,14 @@ The aggregate is not the public file schema: internal tuning and integration
 endpoints remain constructor settings. Environment exposure is explicit rather
 than inferred from every field. Persisted provider connections and credentials
 retain their own runtime workflows and do not join the startup source precedence.
+
+Components own endpoint, request-timeout, and cache-filename defaults and build
+their HTTP clients from those settings. Optional client overrides support SDK
+transport customization without making routine client construction part of
+composition. Overrides preserve component security policies, including Exa's
+redirect restriction. Search, page fetching, catalog refresh, and provider
+authorization have independent request timeouts; streamed inference defaults to
+no total request timeout.
 
 ## Execution belongs to the service
 

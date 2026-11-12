@@ -46,12 +46,16 @@ type subscriptionRuntime struct {
 type SubscriptionDependencies struct {
 	Credentials   *SubscriptionCredentials
 	CredentialRef alfred.CredentialRef
-	HTTPClient    *http.Client
 }
 
-// New constructs an adapter using caller-supplied model metadata and transport.
+// New constructs an adapter with caller-supplied model metadata.
 // The service constructor avoids the SDK client's environment-derived defaults.
-func New(id alfred.ProviderID, config Config, models []alfred.ModelInfo, client *http.Client) *Provider {
+func New(id alfred.ProviderID, config Config, models []alfred.ModelInfo, options ...HTTPOption) *Provider {
+	transportOptions := httpOptions{client: &http.Client{}}
+	for _, apply := range options {
+		apply(&transportOptions)
+	}
+	client := transportOptions.client
 	catalog := make(map[alfred.ModelID]alfred.ModelInfo, len(models))
 	for _, model := range models {
 		model.Ref.ProviderID = id
@@ -72,11 +76,16 @@ func NewSubscription(
 	config Config,
 	models []alfred.ModelInfo,
 	dependencies SubscriptionDependencies,
+	options ...HTTPOption,
 ) *Provider {
-	provider := New(id, Config{BaseURL: config.BaseURL}, models, dependencies.HTTPClient)
+	transportOptions := httpOptions{client: &http.Client{}}
+	for _, apply := range options {
+		apply(&transportOptions)
+	}
+	provider := New(id, Config{BaseURL: config.BaseURL}, models, WithHTTPClient(transportOptions.client))
 	provider.subscription = &subscriptionRuntime{
 		credentials: dependencies.Credentials, ref: dependencies.CredentialRef,
-		client: dependencies.HTTPClient, baseURL: strings.TrimRight(config.BaseURL, "/"),
+		client: transportOptions.client, baseURL: strings.TrimRight(config.BaseURL, "/"),
 	}
 	return provider
 }

@@ -143,8 +143,10 @@ authorization := openai.NewAuthorizationService(
 defer authorization.Close()
 ```
 
-`dependencies` supplies the application's stores and HTTP client. These are
-constructor options, not server TOML or TUI settings.
+`dependencies` supplies the application's stores. The service builds its HTTP
+client using `settings.RequestTimeout`. Use `WithAuthorizationHTTPClient` for a
+custom authorization transport; the supplied client's own timeout applies.
+These constructor options are separate from server TOML and TUI settings.
 The agent name is used for first registration and the bundled callback page;
 it does not rename a registration already issued by OpenAI. Custom success HTML
 is served verbatim only after credentials and plan permission have been validated

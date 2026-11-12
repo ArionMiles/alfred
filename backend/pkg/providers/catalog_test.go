@@ -35,8 +35,11 @@ func TestLoadCatalogFetchesCachesAndMapsPublishedMetadata(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	config := withDefaults[CatalogConfig]()
-	config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "catalog", "models.dev.json")
-	catalog, err := LoadCatalog(t.Context(), config, server.Client())
+	config.URL = server.URL
+	config.CacheFileName = "metadata.json"
+	cacheDir := filepath.Join(t.TempDir(), "catalog")
+	cacheFile := filepath.Join(cacheDir, config.CacheFileName)
+	catalog, err := LoadCatalog(t.Context(), config, cacheDir, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,11 +58,11 @@ func TestLoadCatalogFetchesCachesAndMapsPublishedMetadata(t *testing.T) {
 	if len(catalog.Models("unknown")) != 0 || len(catalog.Models("other")) != 1 {
 		t.Fatal("provider catalog lookup was not scoped")
 	}
-	data, err := os.ReadFile(config.CacheFile)
+	data, err := os.ReadFile(cacheFile)
 	if err != nil || string(data) != catalogFixture {
 		t.Fatalf("source document not retained, error=%v", err)
 	}
-	cached, err := LoadCatalog(t.Context(), config, server.Client())
+	cached, err := LoadCatalog(t.Context(), config, cacheDir, server.Client())
 	if err != nil || calls.Load() != 1 || !reflect.DeepEqual(cached.Models("openai"), catalog.Models("openai")) {
 		t.Fatalf("cache error=%v requests=%d", err, calls.Load())
 	}
@@ -86,19 +89,21 @@ func TestCatalogRefreshRetainsUsableCacheOnFailure(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 			config := withDefaults[CatalogConfig]()
-			config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
-			if err := os.WriteFile(config.CacheFile, []byte(catalogFixture), 0o600); err != nil {
+			config.URL = server.URL
+			cacheDir := t.TempDir()
+			cacheFile := filepath.Join(cacheDir, config.CacheFileName)
+			if err := os.WriteFile(cacheFile, []byte(catalogFixture), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			old := time.Now().Add(-48 * time.Hour)
-			if err := os.Chtimes(config.CacheFile, old, old); err != nil {
+			if err := os.Chtimes(cacheFile, old, old); err != nil {
 				t.Fatal(err)
 			}
-			catalog, err := LoadCatalog(t.Context(), config, server.Client())
+			catalog, err := LoadCatalog(t.Context(), config, cacheDir, server.Client())
 			if err != nil || len(catalog.Models("openai")) != 2 || calls.Load() != 1 {
 				t.Fatalf("stale fallback error=%v requests=%d", err, calls.Load())
 			}
-			data, err := os.ReadFile(config.CacheFile)
+			data, err := os.ReadFile(cacheFile)
 			if err != nil || string(data) != catalogFixture {
 				t.Fatal("failed refresh replaced usable cache")
 			}
@@ -108,13 +113,14 @@ func TestCatalogRefreshRetainsUsableCacheOnFailure(t *testing.T) {
 
 func TestCatalogSourceAcceptsCatalogWithoutOpenAI(t *testing.T) {
 	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_, _ = writer.Write([]byte(`{"other":{"models":{"other-model":{"name":"Other"}}}}`))
 	}))
 	t.Cleanup(server.Close)
 	config := withDefaults[CatalogConfig]()
-	config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
-	source := NewCatalogSource(config, server.Client())
+	config.URL = server.URL
+	cacheDir := t.TempDir()
+	source := NewCatalogSource(config, cacheDir, WithHTTPClient(server.Client()))
 	models, err := source.Models(t.Context(), "other")
 	if err != nil || len(models) != 1 || models[0].Ref.ModelID != "other-model" {
 		t.Fatalf("Models(other) = %#v, %v", models, err)
@@ -130,19 +136,21 @@ func TestCatalogRefreshReplacesStaleCache(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) { _, _ = writer.Write([]byte(catalogFixture)) }))
 	t.Cleanup(server.Close)
 	config := withDefaults[CatalogConfig]()
-	config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
-	if err := os.WriteFile(config.CacheFile, []byte(`{"openai":{"models":{"old":{"name":"Old"}}}}`), 0o600); err != nil {
+	config.URL = server.URL
+	cacheDir := t.TempDir()
+	cacheFile := filepath.Join(cacheDir, config.CacheFileName)
+	if err := os.WriteFile(cacheFile, []byte(`{"openai":{"models":{"old":{"name":"Old"}}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-48 * time.Hour)
-	if err := os.Chtimes(config.CacheFile, old, old); err != nil {
+	if err := os.Chtimes(cacheFile, old, old); err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := LoadCatalog(t.Context(), config, server.Client())
+	catalog, err := LoadCatalog(t.Context(), config, cacheDir, server.Client())
 	if err != nil || len(catalog.Models("openai")) != 2 {
 		t.Fatalf("refresh error=%v", err)
 	}
-	data, err := os.ReadFile(config.CacheFile)
+	data, err := os.ReadFile(cacheFile)
 	if err != nil || string(data) != catalogFixture {
 		t.Fatal("successful refresh did not replace stale cache")
 	}
@@ -168,12 +176,14 @@ func TestCatalogWithoutCacheReportsDownloadAndDecodeErrors(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 			config := withDefaults[CatalogConfig]()
-			config.URL, config.CacheFile = server.URL, filepath.Join(t.TempDir(), "models.dev.json")
-			catalog, err := LoadCatalog(t.Context(), config, server.Client())
+			config.URL = server.URL
+			cacheDir := t.TempDir()
+			cacheFile := filepath.Join(cacheDir, config.CacheFileName)
+			catalog, err := LoadCatalog(t.Context(), config, cacheDir, server.Client())
 			if catalog != nil || errors.WhatKind(err) != test.kind {
 				t.Fatalf("catalog=%v error=%v", catalog, err)
 			}
-			if _, err := os.Stat(config.CacheFile); !os.IsNotExist(err) {
+			if _, err := os.Stat(cacheFile); !os.IsNotExist(err) {
 				t.Fatal("invalid download was cached")
 			}
 		})
@@ -189,15 +199,17 @@ func TestCatalogCancellationDoesNotFallBackToStaleCache(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	config := withDefaults[CatalogConfig]()
-	config.URL, config.CacheFile, config.MaxAge = server.URL, filepath.Join(t.TempDir(), "models.dev.json"), 0
-	if err := os.WriteFile(config.CacheFile, []byte(catalogFixture), 0o600); err != nil {
+	config.URL, config.MaxAge = server.URL, 0
+	cacheDir := t.TempDir()
+	cacheFile := filepath.Join(cacheDir, config.CacheFileName)
+	if err := os.WriteFile(cacheFile, []byte(catalogFixture), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, err := LoadCatalog(ctx, config, server.Client())
+		_, err := LoadCatalog(ctx, config, cacheDir, server.Client())
 		done <- err
 	}()
 	select {
@@ -213,5 +225,23 @@ func TestCatalogCancellationDoesNotFallBackToStaleCache(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("catalog request did not stop")
+	}
+}
+
+func TestCatalogSourceHonorsConfiguredRequestTimeout(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		<-request.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+	config := withDefaults[CatalogConfig]()
+	config.URL = server.URL
+	config.RequestTimeout = 20 * time.Millisecond
+	source := NewCatalogSource(config, t.TempDir())
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	_, err := source.Models(ctx, "openai")
+	if errors.WhatKind(err) != errors.Unavailable || ctx.Err() != nil {
+		t.Fatalf("catalog did not use its own timeout: error=%v, caller=%v", err, ctx.Err())
 	}
 }

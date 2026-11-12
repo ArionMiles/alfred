@@ -91,7 +91,7 @@ func TestSearchSetupIsSeparateFromModelProvidersAndFeedsExa(t *testing.T) {
 			}
 			_, _ = writer.Write([]byte(`{"results":[{"title":"Search result","url":"https://example.org"}]}`))
 		}))
-		results, err := tools.NewExa(remote.URL, store, store, remote.Client()).Search(t.Context(), "query", 1)
+		results, err := tools.NewExa(tools.ExaConfig{Endpoint: remote.URL}, store, store, tools.WithHTTPClient(remote.Client())).Search(t.Context(), "query", 1)
 		remote.Close()
 		if err != nil || len(results) != 1 {
 			t.Fatalf("search=%v err=%v", results, err)

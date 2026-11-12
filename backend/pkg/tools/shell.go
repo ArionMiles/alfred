@@ -12,10 +12,11 @@ import (
 	"github.com/ArionMiles/alfred"
 )
 
-// Config contains file-facing settings for built-in tools.
+// Config contains application settings for built-in tools.
 type Config struct {
 	Shell     ShellConfig     `koanf:"shell"`
 	WebSearch WebSearchConfig `koanf:"web_search"`
+	WebFetch  WebFetchConfig  `koanf:"-"`
 }
 
 // ShellConfig selects the optional, explicitly sourced agent initialization file.

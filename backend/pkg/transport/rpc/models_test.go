@@ -163,9 +163,14 @@ func newModelTestClients(t *testing.T) (Clients, *sqlite.Store) {
 	}
 	var catalog providers.CatalogConfig
 	defaults.MustSet(&catalog)
-	catalog.URL, catalog.CacheFile = source.URL+"/catalog", filepath.Join(t.TempDir(), "models.dev.json")
+	catalog.URL = source.URL + "/catalog"
+	cacheDir := t.TempDir()
 	registry, err := providers.NewRegistry(nil, providers.WithConfiguredProviders(openai.NewResolver(
-		store, store, nil, providers.NewCatalogSource(catalog, source.Client()), source.Client(),
+		store,
+		store,
+		nil,
+		providers.NewCatalogSource(catalog, cacheDir, providers.WithHTTPClient(source.Client())),
+		openai.WithHTTPClient(source.Client()),
 	)))
 	if err != nil {
 		t.Fatal(err)
